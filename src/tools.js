@@ -82,6 +82,59 @@ function registerTools(server, client) {
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
   );
+
+  // 7. get_message_media
+  server.tool(
+    'get_message_media',
+    'メッセージに紐づくメディア (画像/動画/音声) を取得する。画像は AI が直接「見る」ことができる',
+    { message_id: z.string().describe('メッセージID') },
+    async ({ message_id }) => {
+      const result = await client.getMessageMedia(message_id);
+      if (result.error) {
+        return { content: [{ type: 'text', text: `エラー: ${result.error}` }] };
+      }
+
+      // 画像は MCP image content で返し AI が直接視認できるようにする
+      if (result.type === 'image' && result.data_base64 && result.mime_type?.startsWith('image/')) {
+        return {
+          content: [
+            {
+              type: 'image',
+              data: result.data_base64,
+              mimeType: result.mime_type,
+            },
+            {
+              type: 'text',
+              text: `画像: ${result.file_name} (${result.mime_type}, ${result.file_size} bytes)`,
+            },
+          ],
+        };
+      }
+
+      // 音声は文字起こし優先で返す (MCP の audio content type は対応 client が限定的)
+      if (result.type === 'voice') {
+        const trans = result.transcription;
+        const lines = [`音声メッセージ: ${result.file_name} (${result.mime_type}, ${result.file_size} bytes)`];
+        if (trans?.formatted_text || trans?.raw_text) {
+          lines.push('', '=== 文字起こし ===', trans.formatted_text || trans.raw_text);
+        } else {
+          lines.push('', '(文字起こし未完了または失敗)');
+        }
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
+      }
+
+      // 動画・その他: メタ情報のみ (バイナリは大きすぎることが多いため text 化しない)
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `メディア: ${result.file_name} (type=${result.type}, ${result.mime_type}, ${result.file_size} bytes)\n` +
+                  `データは base64 で取得可能ですが、MCP text 応答には大きすぎるためメタ情報のみ返しています。`,
+          },
+        ],
+      };
+    }
+  );
 }
 
 module.exports = { registerTools };

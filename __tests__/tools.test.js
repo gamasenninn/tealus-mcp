@@ -30,6 +30,7 @@ function createMockClient() {
     getRooms: jest.fn().mockResolvedValue({ rooms: [{ id: 'room1', name: 'General' }] }),
     joinRoom: jest.fn().mockResolvedValue({ success: true }),
     markRead: jest.fn().mockResolvedValue({ success: true, count: 2 }),
+    getMessageMedia: jest.fn(),
   };
 }
 
@@ -42,15 +43,16 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('6ツールが登録される', () => {
+  test('7ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(6);
+    expect(Object.keys(tools)).toHaveLength(7);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
     expect(tools).toHaveProperty('list_rooms');
     expect(tools).toHaveProperty('join_room');
     expect(tools).toHaveProperty('mark_read');
+    expect(tools).toHaveProperty('get_message_media');
   });
 
   test('send_message がメッセージを送信する', async () => {
@@ -108,6 +110,73 @@ describe('Tealus MCP Tools', () => {
     expect(client.markRead).toHaveBeenCalledWith(['msg1', 'msg2']);
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.count).toBe(2);
+  });
+
+  describe('get_message_media', () => {
+    test('image を image content として返す (AI が直接視認できる形式)', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'image',
+        mime_type: 'image/png',
+        file_name: 'photo.png',
+        file_size: 12345,
+        data_base64: 'aGVsbG8=',
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-img-1' });
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-img-1');
+      expect(result.content[0]).toEqual({ type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' });
+      expect(result.content[1].type).toBe('text');
+      expect(result.content[1].text).toContain('photo.png');
+    });
+
+    test('voice は文字起こしを優先して text で返す', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'voice',
+        mime_type: 'audio/wav',
+        file_name: 'voice.wav',
+        file_size: 9999,
+        data_base64: 'wave-data',
+        transcription: { formatted_text: 'お疲れ様です', raw_text: 'お疲れ様です', status: 'done' },
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-v-1' });
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toContain('お疲れ様です');
+      expect(result.content[0].text).toContain('voice.wav');
+    });
+
+    test('voice で文字起こし無しのケース', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'voice',
+        mime_type: 'audio/wav',
+        file_name: 'voice.wav',
+        file_size: 9999,
+        data_base64: 'wave-data',
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-v-2' });
+      expect(result.content[0].text).toContain('文字起こし未完了または失敗');
+    });
+
+    test('video など他タイプはメタ情報のみ返す', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'video',
+        mime_type: 'video/mp4',
+        file_name: 'clip.mp4',
+        file_size: 8388608,
+        data_base64: 'big-data',
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-vid-1' });
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toContain('clip.mp4');
+      expect(result.content[0].text).toContain('video/mp4');
+      expect(result.content[0].text).not.toContain('big-data'); // base64 は埋め込まない
+    });
+
+    test('error 応答を text で返す', async () => {
+      client.getMessageMedia.mockResolvedValue({ error: 'メッセージが見つかりません' });
+      const result = await server.callTool('get_message_media', { message_id: 'unknown' });
+      expect(result.content[0].text).toContain('エラー');
+      expect(result.content[0].text).toContain('メッセージが見つかりません');
+    });
   });
 });
 

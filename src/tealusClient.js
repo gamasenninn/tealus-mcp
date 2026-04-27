@@ -84,6 +84,10 @@ class TealusClient {
   async markRead(messageIds) {
     return this.request('POST', '/bot/mark-read', { message_ids: messageIds });
   }
+
+  async getMessageMedia(messageId) {
+    return this.request('GET', `/bot/messages/${messageId}/media`);
+  }
 }
 
 module.exports = { TealusClient };
