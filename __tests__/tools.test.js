@@ -31,6 +31,7 @@ function createMockClient() {
     joinRoom: jest.fn().mockResolvedValue({ success: true }),
     markRead: jest.fn().mockResolvedValue({ success: true, count: 2 }),
     getMessageMedia: jest.fn(),
+    searchMessages: jest.fn(),
   };
 }
 
@@ -43,9 +44,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('7ツールが登録される', () => {
+  test('8ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(7);
+    expect(Object.keys(tools)).toHaveLength(8);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -53,6 +54,7 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('join_room');
     expect(tools).toHaveProperty('mark_read');
     expect(tools).toHaveProperty('get_message_media');
+    expect(tools).toHaveProperty('search_messages');
   });
 
   test('send_message がメッセージを送信する', async () => {
@@ -176,6 +178,61 @@ describe('Tealus MCP Tools', () => {
       const result = await server.callTool('get_message_media', { message_id: 'unknown' });
       expect(result.content[0].text).toContain('エラー');
       expect(result.content[0].text).toContain('メッセージが見つかりません');
+    });
+  });
+
+  describe('search_messages', () => {
+    test('client.searchMessages が引数とともに呼ばれる', async () => {
+      client.searchMessages.mockResolvedValue({ results: [], has_more: false, next_offset: null });
+      await server.callTool('search_messages', { q: '削除', limit: 5 });
+      expect(client.searchMessages).toHaveBeenCalledWith({ q: '削除', limit: 5 });
+    });
+
+    test('レスポンスが JSON 文字列で text として返る', async () => {
+      const mockResult = {
+        results: [{
+          message_id: 'm1',
+          room_name: 'Web部',
+          snippet: '...設計上の **削除** 確認...',
+        }],
+        has_more: false,
+        next_offset: null,
+      };
+      client.searchMessages.mockResolvedValue(mockResult);
+      const result = await server.callTool('search_messages', { q: '削除' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.results).toHaveLength(1);
+      expect(parsed.results[0].snippet).toContain('**削除**');
+    });
+
+    test('snippet ハイライトが透過する', async () => {
+      client.searchMessages.mockResolvedValue({
+        results: [{ message_id: 'm1', snippet: 'before **match** after' }],
+        has_more: false,
+      });
+      const result = await server.callTool('search_messages', { q: 'match' });
+      expect(result.content[0].text).toContain('**match**');
+    });
+
+    test('has_more / next_offset が透過する', async () => {
+      client.searchMessages.mockResolvedValue({
+        results: new Array(10).fill({}).map((_, i) => ({ message_id: `m${i}` })),
+        has_more: true,
+        next_offset: 10,
+      });
+      const result = await server.callTool('search_messages', { q: 'test', limit: 10 });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.has_more).toBe(true);
+      expect(parsed.next_offset).toBe(10);
+    });
+
+    test('空 results の応答も正しく返す', async () => {
+      client.searchMessages.mockResolvedValue({ results: [], has_more: false, next_offset: null });
+      const result = await server.callTool('search_messages', { q: 'no-match' });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.results).toEqual([]);
+      expect(parsed.has_more).toBe(false);
     });
   });
 });

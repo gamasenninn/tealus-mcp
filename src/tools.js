@@ -83,7 +83,32 @@ function registerTools(server, client) {
     }
   );
 
-  // 7. get_message_media
+  // 7. search_messages
+  server.tool(
+    'search_messages',
+    '直近の議論を検索する。snippet は索引、詳細が要れば get_messages で再取得する。' +
+    '使い方: まず q + room_id か since/until で narrow に絞る → 結果が少なすぎたら範囲を広げる。' +
+    '日本語 2 文字 query は index が効きにくく遅い (3 文字以上推奨)。' +
+    'q / room_id / sender_id / since / tag_names / type のうち少なくとも 1 つを指定すること。',
+    {
+      q: z.string().optional().describe('キーワード (ILIKE)。3 文字以上推奨'),
+      room_id: z.string().optional().describe('単一ルーム指定 (省略時 cross-room)'),
+      sender_id: z.string().optional().describe('発言者の user ID'),
+      type: z.enum(['text', 'image', 'voice', 'video', 'stamp', 'system']).optional().describe('メッセージ type 絞り込み'),
+      tag_names: z.string().optional().describe('CSV、タグ AND 検索 (例: "TODO,important")'),
+      is_done: z.boolean().optional().describe('TODO 完了状態 (tag_names 指定時)'),
+      since: z.string().optional().describe('開始日時 ISO 8601'),
+      until: z.string().optional().describe('終了日時 ISO 8601'),
+      limit: z.number().min(1).max(50).optional().describe('default 10, max 50'),
+      offset: z.number().min(0).optional().describe('default 0、has_more=true 時の続きは next_offset'),
+    },
+    async (args) => {
+      const result = await client.searchMessages(args);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // 8. get_message_media
   server.tool(
     'get_message_media',
     'メッセージに紐づくメディア (画像/動画/音声) を取得する。画像は AI が直接「見る」ことができる',

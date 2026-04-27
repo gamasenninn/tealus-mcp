@@ -88,6 +88,14 @@ class TealusClient {
   async getMessageMedia(messageId) {
     return this.request('GET', `/bot/messages/${messageId}/media`);
   }
+
+  async searchMessages(params) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params || {})) {
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    }
+    return this.request('GET', `/bot/search?${qs.toString()}`);
+  }
 }
 
 module.exports = { TealusClient };
