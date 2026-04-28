@@ -32,6 +32,7 @@ function createMockClient() {
     markRead: jest.fn().mockResolvedValue({ success: true, count: 2 }),
     getMessageMedia: jest.fn(),
     searchMessages: jest.fn(),
+    markTagDone: jest.fn(),
   };
 }
 
@@ -44,9 +45,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('8ツールが登録される', () => {
+  test('9ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(8);
+    expect(Object.keys(tools)).toHaveLength(9);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -55,6 +56,7 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('mark_read');
     expect(tools).toHaveProperty('get_message_media');
     expect(tools).toHaveProperty('search_messages');
+    expect(tools).toHaveProperty('mark_tag_done');
   });
 
   test('send_message がメッセージを送信する', async () => {
@@ -233,6 +235,36 @@ describe('Tealus MCP Tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.results).toEqual([]);
       expect(parsed.has_more).toBe(false);
+    });
+  });
+
+  describe('mark_tag_done', () => {
+    test('client.markTagDone が引数とともに呼ばれる', async () => {
+      client.markTagDone.mockResolvedValue({ success: true, message_id: 'm1', tag_name: 'TODO', is_done: true });
+      await server.callTool('mark_tag_done', { message_id: 'm1', tag_name: 'TODO', is_done: true });
+      expect(client.markTagDone).toHaveBeenCalledWith('m1', 'TODO', true);
+    });
+
+    test('成功レスポンスを JSON で返す', async () => {
+      client.markTagDone.mockResolvedValue({ success: true, message_id: 'm1', tag_name: 'tealus関係', is_done: true });
+      const result = await server.callTool('mark_tag_done', { message_id: 'm1', tag_name: 'tealus関係', is_done: true });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.is_done).toBe(true);
+    });
+
+    test('is_done=false でも呼べる', async () => {
+      client.markTagDone.mockResolvedValue({ success: true, is_done: false });
+      await server.callTool('mark_tag_done', { message_id: 'm1', tag_name: 'TODO', is_done: false });
+      expect(client.markTagDone).toHaveBeenCalledWith('m1', 'TODO', false);
+    });
+
+    test('error レスポンスをそのまま透過する', async () => {
+      client.markTagDone.mockResolvedValue({ error: 'タグ "X" がこのルームに存在しません' });
+      const result = await server.callTool('mark_tag_done', { message_id: 'm1', tag_name: 'X', is_done: true });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('存在しません');
     });
   });
 });

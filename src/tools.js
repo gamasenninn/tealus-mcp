@@ -108,7 +108,24 @@ function registerTools(server, client) {
     }
   );
 
-  // 8. get_message_media
+  // 8. mark_tag_done
+  server.tool(
+    'mark_tag_done',
+    'メッセージに付いた特定タグの完了状態 (is_done) を更新する。' +
+    'TODO 系タグ (is_todo=true) の場合のみ意味を持つ。' +
+    'search_messages で見つけた完了済議題を即マーク更新できる。',
+    {
+      message_id: z.string().describe('メッセージID'),
+      tag_name: z.string().describe('タグ名 (room スコープで解決される)'),
+      is_done: z.boolean().describe('true で完了、false で未完了'),
+    },
+    async ({ message_id, tag_name, is_done }) => {
+      const result = await client.markTagDone(message_id, tag_name, is_done);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // 9. get_message_media
   server.tool(
     'get_message_media',
     'メッセージに紐づくメディア (画像/動画/音声) を取得する。画像は AI が直接「見る」ことができる',

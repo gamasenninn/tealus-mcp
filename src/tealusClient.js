@@ -96,6 +96,14 @@ class TealusClient {
     }
     return this.request('GET', `/bot/search?${qs.toString()}`);
   }
+
+  async markTagDone(messageId, tagName, isDone) {
+    return this.request(
+      'PATCH',
+      `/bot/messages/${messageId}/tags/${encodeURIComponent(tagName)}/done`,
+      { is_done: isDone }
+    );
+  }
 }
 
 module.exports = { TealusClient };
