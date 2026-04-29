@@ -33,6 +33,7 @@ function createMockClient() {
     getMessageMedia: jest.fn(),
     searchMessages: jest.fn(),
     markTagDone: jest.fn(),
+    createRoom: jest.fn(),
   };
 }
 
@@ -45,9 +46,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('9ツールが登録される', () => {
+  test('10ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(9);
+    expect(Object.keys(tools)).toHaveLength(10);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -57,6 +58,7 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('get_message_media');
     expect(tools).toHaveProperty('search_messages');
     expect(tools).toHaveProperty('mark_tag_done');
+    expect(tools).toHaveProperty('create_room');
   });
 
   test('send_message がメッセージを送信する', async () => {
@@ -235,6 +237,56 @@ describe('Tealus MCP Tools', () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.results).toEqual([]);
       expect(parsed.has_more).toBe(false);
+    });
+  });
+
+  describe('create_room', () => {
+    test('client.createRoom が引数とともに呼ばれる (member_ids あり)', async () => {
+      client.createRoom.mockResolvedValue({ room: { id: 'r1', name: 'AI班連絡' }, members: [] });
+      await server.callTool('create_room', { name: 'AI班連絡', member_ids: ['u1', 'u2'] });
+      expect(client.createRoom).toHaveBeenCalledWith('AI班連絡', ['u1', 'u2'], 'group');
+    });
+
+    test('member_ids 省略時は空配列で呼ばれる', async () => {
+      client.createRoom.mockResolvedValue({ room: { id: 'r1', name: 'solo' }, members: [] });
+      await server.callTool('create_room', { name: 'solo' });
+      expect(client.createRoom).toHaveBeenCalledWith('solo', [], 'group');
+    });
+
+    test('type 省略時は "group" で呼ばれる', async () => {
+      client.createRoom.mockResolvedValue({ room: { id: 'r1' }, members: [] });
+      await server.callTool('create_room', { name: 'test', member_ids: ['u1'] });
+      const call = client.createRoom.mock.calls[0];
+      expect(call[2]).toBe('group');
+    });
+
+    test('成功レスポンスを JSON で返す', async () => {
+      const mockResult = {
+        room: { id: 'r-uuid', type: 'group', name: 'test', created_at: '2026-04-29T10:00:00Z' },
+        members: [{ user_id: 'bot', display_name: 'Claude', role: 'admin' }],
+      };
+      client.createRoom.mockResolvedValue(mockResult);
+      const result = await server.callTool('create_room', { name: 'test' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.room.id).toBe('r-uuid');
+      expect(parsed.room.name).toBe('test');
+      expect(parsed.members).toHaveLength(1);
+    });
+
+    test('error 応答を JSON でそのまま透過する', async () => {
+      client.createRoom.mockResolvedValue({ error: 'グループ名は必須です' });
+      const result = await server.callTool('create_room', { name: '' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('グループ名は必須');
+    });
+
+    test('複数メンバー追加が透過する (10 名)', async () => {
+      const memberIds = Array.from({ length: 10 }, (_, i) => `user-${i}`);
+      client.createRoom.mockResolvedValue({ room: { id: 'r2' }, members: memberIds.map(id => ({ user_id: id })) });
+      await server.callTool('create_room', { name: 'big group', member_ids: memberIds });
+      expect(client.createRoom).toHaveBeenCalledWith('big group', memberIds, 'group');
     });
   });
 

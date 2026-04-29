@@ -104,6 +104,14 @@ class TealusClient {
       { is_done: isDone }
     );
   }
+
+  async createRoom(name, memberIds = [], type = 'group') {
+    return this.request('POST', '/rooms', {
+      name,
+      type,
+      member_ids: Array.isArray(memberIds) ? memberIds : [],
+    });
+  }
 }
 
 module.exports = { TealusClient };

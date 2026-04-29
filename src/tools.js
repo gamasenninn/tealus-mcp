@@ -125,6 +125,25 @@ function registerTools(server, client) {
     }
   );
 
+  // 10. create_room
+  server.tool(
+    'create_room',
+    '新しいグループルームを作成する。呼び出した bot は admin として自動追加される。' +
+    '用途: AI 班連絡用ルーム / 議題スレッド / 期間限定タスク / インシデント対応など、' +
+    'AI が組織を能動的に編成したいときに使う primitive。' +
+    'name は必須。member_ids 省略時は bot 1 人だけのルームになる。' +
+    'type は現状 "group" のみ対応 (direct ルームは別 endpoint)。',
+    {
+      name: z.string().describe('ルーム名 (必須、空文字不可)'),
+      member_ids: z.array(z.string()).optional().describe('追加メンバーの user_id 配列。省略時は bot のみ'),
+      type: z.enum(['group']).optional().describe('default: "group"。現状 group のみサポート'),
+    },
+    async ({ name, member_ids, type }) => {
+      const result = await client.createRoom(name, member_ids || [], type || 'group');
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
   // 9. get_message_media
   server.tool(
     'get_message_media',
