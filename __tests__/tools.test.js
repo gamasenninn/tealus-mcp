@@ -34,6 +34,7 @@ function createMockClient() {
     searchMessages: jest.fn(),
     markTagDone: jest.fn(),
     createRoom: jest.fn(),
+    deleteRoom: jest.fn(),
   };
 }
 
@@ -46,9 +47,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('10ツールが登録される', () => {
+  test('11ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(10);
+    expect(Object.keys(tools)).toHaveLength(11);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -59,6 +60,7 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('search_messages');
     expect(tools).toHaveProperty('mark_tag_done');
     expect(tools).toHaveProperty('create_room');
+    expect(tools).toHaveProperty('delete_room');
   });
 
   test('send_message がメッセージを送信する', async () => {
@@ -287,6 +289,44 @@ describe('Tealus MCP Tools', () => {
       client.createRoom.mockResolvedValue({ room: { id: 'r2' }, members: memberIds.map(id => ({ user_id: id })) });
       await server.callTool('create_room', { name: 'big group', member_ids: memberIds });
       expect(client.createRoom).toHaveBeenCalledWith('big group', memberIds, 'group');
+    });
+  });
+
+  describe('delete_room', () => {
+    test('client.deleteRoom が引数とともに呼ばれる', async () => {
+      client.deleteRoom.mockResolvedValue({ success: true, room_id: 'r1' });
+      await server.callTool('delete_room', { room_id: 'r1' });
+      expect(client.deleteRoom).toHaveBeenCalledWith('r1');
+    });
+
+    test('成功レスポンスを JSON で返す', async () => {
+      client.deleteRoom.mockResolvedValue({ success: true, room_id: 'r-uuid' });
+      const result = await server.callTool('delete_room', { room_id: 'r-uuid' });
+      expect(result.content[0].type).toBe('text');
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.success).toBe(true);
+      expect(parsed.room_id).toBe('r-uuid');
+    });
+
+    test('non-creator エラー (403) を透過する', async () => {
+      client.deleteRoom.mockResolvedValue({ error: 'ルームを作成した本人のみ削除できます' });
+      const result = await server.callTool('delete_room', { room_id: 'r1' });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('作成した本人');
+    });
+
+    test('他メンバーあり (409) を透過する', async () => {
+      client.deleteRoom.mockResolvedValue({ error: '他のメンバーが残っているため削除できません。先にメンバーを退会させてください。' });
+      const result = await server.callTool('delete_room', { room_id: 'r1' });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('他のメンバー');
+    });
+
+    test('not found (404) を透過する', async () => {
+      client.deleteRoom.mockResolvedValue({ error: 'ルームが見つかりません' });
+      const result = await server.callTool('delete_room', { room_id: 'unknown' });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.error).toContain('見つかりません');
     });
   });
 

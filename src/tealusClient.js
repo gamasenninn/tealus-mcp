@@ -112,6 +112,10 @@ class TealusClient {
       member_ids: Array.isArray(memberIds) ? memberIds : [],
     });
   }
+
+  async deleteRoom(roomId) {
+    return this.request('DELETE', `/rooms/${roomId}`);
+  }
 }
 
 module.exports = { TealusClient };

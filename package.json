@@ -1,7 +1,7 @@
 {
   "name": "tealus-mcp",
-  "version": "0.5.0",
-  "description": "Tealus MCP Server — Tealus Bot API as MCP tools (send_message / send_image / get_messages / get_message_media / search_messages / mark_tag_done / create_room / list_rooms / join_room / mark_read). Install with: npx -y github:gamasenninn/tealus-mcp",
+  "version": "0.6.0",
+  "description": "Tealus MCP Server — Tealus Bot API as MCP tools (send_message / send_image / get_messages / get_message_media / search_messages / mark_tag_done / create_room / delete_room / list_rooms / join_room / mark_read). Install with: npx -y github:gamasenninn/tealus-mcp",
   "license": "MIT",
   "author": "Satoshi Ono",
   "homepage": "https://github.com/gamasenninn/tealus-mcp",

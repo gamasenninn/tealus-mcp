@@ -125,6 +125,22 @@ function registerTools(server, client) {
     }
   );
 
+  // 11. delete_room
+  server.tool(
+    'delete_room',
+    'グループルームを削除する。**破壊的操作**: メッセージ・メンバー・タグ等が CASCADE で削除される。' +
+    '安全制約: (1) 自分が作成者であること (rooms.created_by) (2) 自分以外のメンバーが残っていないこと (= solo)。' +
+    '他のメンバーが残っている場合は先に退会させる必要がある。' +
+    'direct ルームは削除不可 (この endpoint は group のみ)。',
+    {
+      room_id: z.string().describe('削除するルームID'),
+    },
+    async ({ room_id }) => {
+      const result = await client.deleteRoom(room_id);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
   // 10. create_room
   server.tool(
     'create_room',
