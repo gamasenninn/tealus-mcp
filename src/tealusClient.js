@@ -69,8 +69,16 @@ class TealusClient {
     return res.json();
   }
 
-  async getMessages(roomId, limit = 20) {
-    return this.request('GET', `/bot/messages?room_id=${roomId}&limit=${limit}`);
+  async getMessages(roomId, limit = 20, options = {}) {
+    const { includeTranscription, includeRaw } = options;
+    const params = new URLSearchParams({ room_id: roomId, limit: String(limit) });
+    if (includeTranscription !== undefined) {
+      params.set('include_transcription', String(includeTranscription));
+    }
+    if (includeRaw !== undefined) {
+      params.set('include_raw', String(includeRaw));
+    }
+    return this.request('GET', `/bot/messages?${params.toString()}`);
   }
 
   async getRooms() {

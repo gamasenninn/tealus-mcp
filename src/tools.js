@@ -39,13 +39,19 @@ function registerTools(server, client) {
   // 3. get_messages
   server.tool(
     'get_messages',
-    'ルームのメッセージ履歴を取得する',
+    'ルームのメッセージ履歴を取得する。voice メッセージの transcription は default で formatted_text のみ inline (raw_text は省略)。' +
+    'verbosity 制御: include_raw=true で raw_text を追加、include_transcription=false で text を省略し id+status+version のみ返す (大量取得時の軽量モード)。',
     {
       room_id: z.string().describe('ルームID'),
       limit: z.number().optional().describe('取得件数（デフォルト20、最大100）'),
+      include_transcription: z.boolean().optional().describe('voice の transcription text を含めるか (default true、false で id/status/version のみ)'),
+      include_raw: z.boolean().optional().describe('raw_text (Whisper 生出力) を含めるか (default false、debug / 整形精度評価用)'),
     },
-    async ({ room_id, limit }) => {
-      const result = await client.getMessages(room_id, limit || 20);
+    async ({ room_id, limit, include_transcription, include_raw }) => {
+      const result = await client.getMessages(room_id, limit || 20, {
+        includeTranscription: include_transcription,
+        includeRaw: include_raw,
+      });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
   );

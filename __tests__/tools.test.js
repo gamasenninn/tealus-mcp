@@ -87,16 +87,53 @@ describe('Tealus MCP Tools', () => {
     expect(result.content[0].type).toBe('text');
   });
 
-  test('get_messages がメッセージ履歴を取得する', async () => {
-    const result = await server.callTool('get_messages', { room_id: 'room1', limit: 10 });
-    expect(client.getMessages).toHaveBeenCalledWith('room1', 10);
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.messages).toHaveLength(1);
-  });
+  describe('get_messages', () => {
+    test('メッセージ履歴を取得する (limit 指定)', async () => {
+      const result = await server.callTool('get_messages', { room_id: 'room1', limit: 10 });
+      expect(client.getMessages).toHaveBeenCalledWith('room1', 10, {
+        includeTranscription: undefined,
+        includeRaw: undefined,
+      });
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.messages).toHaveLength(1);
+    });
 
-  test('get_messages の limit デフォルトは20', async () => {
-    await server.callTool('get_messages', { room_id: 'room1' });
-    expect(client.getMessages).toHaveBeenCalledWith('room1', 20);
+    test('limit デフォルトは20', async () => {
+      await server.callTool('get_messages', { room_id: 'room1' });
+      expect(client.getMessages).toHaveBeenCalledWith('room1', 20, {
+        includeTranscription: undefined,
+        includeRaw: undefined,
+      });
+    });
+
+    test('include_raw=true を指定すると options で透過する', async () => {
+      await server.callTool('get_messages', { room_id: 'room1', include_raw: true });
+      expect(client.getMessages).toHaveBeenCalledWith('room1', 20, {
+        includeTranscription: undefined,
+        includeRaw: true,
+      });
+    });
+
+    test('include_transcription=false を指定すると options で透過する (id-only モード)', async () => {
+      await server.callTool('get_messages', { room_id: 'room1', include_transcription: false });
+      expect(client.getMessages).toHaveBeenCalledWith('room1', 20, {
+        includeTranscription: false,
+        includeRaw: undefined,
+      });
+    });
+
+    test('flag 両方指定 (include_transcription=true, include_raw=true) も透過する', async () => {
+      await server.callTool('get_messages', {
+        room_id: 'room1',
+        limit: 5,
+        include_transcription: true,
+        include_raw: true,
+      });
+      expect(client.getMessages).toHaveBeenCalledWith('room1', 5, {
+        includeTranscription: true,
+        includeRaw: true,
+      });
+    });
   });
 
   test('list_rooms がルーム一覧を取得する', async () => {
