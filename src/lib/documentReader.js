@@ -54,8 +54,14 @@ async function extractPdf(buffer) {
   const result = { format: 'pdf', text, pages, truncated };
   if (parseError) {
     result.warning = `PDF 解析エラー: ${parseError}`;
-  } else if (text.length < MIN_TEXT_LENGTH_FOR_OK) {
-    result.warning = 'text 抽出量が極端に少ない (scan PDF / image-only PDF の可能性)。Approach 2 (Vision API fallback) は別 issue で対応予定';
+  } else {
+    // scan PDF / image-only PDF は pdf-parse が pages 数や構造は読めるが
+    // 本文文字を抽出できず空白のみ返すケースがある (例: 270 chars で全部 \n)。
+    // 生 length ではなく **空白を除いた文字数** で判定。
+    const nonWsLength = text.replace(/\s/g, '').length;
+    if (nonWsLength < MIN_TEXT_LENGTH_FOR_OK) {
+      result.warning = `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF の可能性。Approach 2 (Vision API fallback) は別 issue で対応予定`;
+    }
   }
   return result;
 }

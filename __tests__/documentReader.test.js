@@ -151,6 +151,26 @@ describe('extractText - scan PDF heuristic', () => {
     expect(result.warning).toMatch(/scan PDF|image-only|抽出量/);
     jest.dontMock('pdf-parse');
   });
+
+  test('text が改行/空白のみの PDF (実 scan PDF パターン) も warning 付き', async () => {
+    // pdf-parse が pages や構造は取れるが本文は \n だけ返すケース
+    // (実 scan PDF / image-only PDF で観測された)
+    jest.resetModules();
+    jest.doMock('pdf-parse', () => async () => ({ text: '\n'.repeat(270), numpages: 7 }));
+    const { extractText: extractTextMocked } = require('../src/lib/documentReader');
+    const result = await extractTextMocked({
+      type: 'file',
+      data_base64: Buffer.from('%PDF-1.4\n').toString('base64'),
+      mime_type: 'application/pdf',
+      file_name: 'scan-7pages.pdf',
+      file_size: 9,
+    });
+    expect(result.format).toBe('pdf');
+    expect(result.pages).toBe(7);
+    expect(result.warning).toMatch(/scan PDF|image-only|抽出量/);
+    expect(result.warning).toMatch(/空白除外/);
+    jest.dontMock('pdf-parse');
+  });
 });
 
 describe('extractText - error handling', () => {

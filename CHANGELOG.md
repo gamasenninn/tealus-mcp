@@ -10,6 +10,18 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-05-04
+
+### Fixed
+
+- **scan PDF / image-only PDF の検出 heuristic を強化** ([tealus#232](https://github.com/gamasenninn/tealus/issues/232))
+  - 実機 verify で 7 ページの scan PDF (`gold_strategy.pdf`) が観測:
+    - pdf-parse は pages=7 と structure を取れたが、本文 text は **270 chars 全部 `\n` (改行のみ)** で返す
+    - v0.8.0 の heuristic は **生 length** で判定 (`text.length < 50`) のため通過、warning が出ず agent が「PDF を確認したが要約できなかった」と困惑
+  - **修正**: 空白を除いた non-whitespace char 数で判定 (`text.replace(/\s/g, '').length < 50`)
+  - 効果: 上記 PDF で warning に「空白除外 0 chars / pages=7。scan PDF / image-only PDF の可能性」が付き、agent が「Vision API fallback (未実装) が必要」と明確に応答可能
+  - test 追加: `extractText - scan PDF heuristic` に whitespace-only 検出 case (54 件 pass、回帰なし)
+
 ## [0.8.0] - 2026-05-04
 
 ### Added
