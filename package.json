@@ -1,7 +1,7 @@
 {
   "name": "tealus-mcp",
-  "version": "0.7.0",
-  "description": "Tealus MCP Server — Tealus Bot API as MCP tools (send_message / send_image / get_messages / get_message_media / search_messages / mark_tag_done / create_room / delete_room / list_rooms / join_room / mark_read). Install with: npx -y github:gamasenninn/tealus-mcp",
+  "version": "0.8.0",
+  "description": "Tealus MCP Server — Tealus Bot API as MCP tools (send_message / send_image / get_messages / get_message_media / read_document / search_messages / mark_tag_done / create_room / delete_room / list_rooms / join_room / mark_read). Install with: npx -y github:gamasenninn/tealus-mcp",
   "license": "MIT",
   "author": "Satoshi Ono",
   "homepage": "https://github.com/gamasenninn/tealus-mcp",
@@ -37,15 +37,27 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "jest --no-coverage --forceExit"
+    "test": "jest --no-coverage --forceExit",
+    "fixtures": "node __tests__/fixtures/generate.js"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/__tests__/fixtures/"
+    ]
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "node-fetch": "^2.7.0",
+    "exceljs": "^4.4.0",
     "form-data": "^4.0.0",
+    "mammoth": "^1.12.0",
+    "node-fetch": "^2.7.0",
+    "pdf-parse": "^1.1.4",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "jest": "^29.7.0"
+    "docx": "^9.6.1",
+    "jest": "^29.7.0",
+    "pdf-lib": "^1.17.1"
   }
 }

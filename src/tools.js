@@ -3,6 +3,7 @@
  * Bot API の各機能を MCP ツールとして公開
  */
 const { z } = require('zod');
+const { extractText } = require('./lib/documentReader');
 
 /**
  * MCP Server にツールを登録
@@ -215,6 +216,33 @@ function registerTools(server, client) {
                   `データは base64 で取得可能ですが、MCP text 応答には大きすぎるためメタ情報のみ返しています。`,
           },
         ],
+      };
+    }
+  );
+
+  // 12. read_document
+  server.tool(
+    'read_document',
+    'Tealus メッセージに添付された PDF/DOCX/XLSX を text 化して返す。get_message_media がメタ情報のみ返すのに対し、本 tool は文書本文を text として抽出する。',
+    { message_id: z.string().describe('対象メッセージのID') },
+    async ({ message_id }) => {
+      const media = await client.getMessageMedia(message_id);
+      if (media.error) {
+        return { content: [{ type: 'text', text: `エラー: ${media.error}` }] };
+      }
+      const result = await extractText(media);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            text: result.text,
+            format: result.format,
+            ...(result.pages !== undefined ? { pages: result.pages } : {}),
+            ...(result.sheets !== undefined ? { sheets: result.sheets.map(s => ({ name: s.name })) } : {}),
+            ...(result.truncated ? { truncated: true } : {}),
+            ...(result.warning ? { warning: result.warning } : {}),
+          }, null, 2),
+        }],
       };
     }
   );

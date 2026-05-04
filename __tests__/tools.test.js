@@ -47,9 +47,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('11ツールが登録される', () => {
+  test('12ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(11);
+    expect(Object.keys(tools)).toHaveLength(12);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -61,6 +61,7 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('mark_tag_done');
     expect(tools).toHaveProperty('create_room');
     expect(tools).toHaveProperty('delete_room');
+    expect(tools).toHaveProperty('read_document');
   });
 
   test('send_message がメッセージを送信する', async () => {
@@ -219,6 +220,83 @@ describe('Tealus MCP Tools', () => {
     test('error 応答を text で返す', async () => {
       client.getMessageMedia.mockResolvedValue({ error: 'メッセージが見つかりません' });
       const result = await server.callTool('get_message_media', { message_id: 'unknown' });
+      expect(result.content[0].text).toContain('エラー');
+      expect(result.content[0].text).toContain('メッセージが見つかりません');
+    });
+  });
+
+  describe('read_document', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const FIXTURES_DIR = path.join(__dirname, 'fixtures');
+
+    function fixtureMedia(filename, mimeType) {
+      const buffer = fs.readFileSync(path.join(FIXTURES_DIR, filename));
+      return {
+        type: 'file',
+        data_base64: buffer.toString('base64'),
+        mime_type: mimeType,
+        file_name: filename,
+        file_size: buffer.length,
+      };
+    }
+
+    test('PDF を text 化して JSON 応答を返す', async () => {
+      client.getMessageMedia.mockResolvedValue(fixtureMedia('sample.pdf', 'application/pdf'));
+      const result = await server.callTool('read_document', { message_id: 'msg-pdf-1' });
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-pdf-1');
+      expect(result.content[0].type).toBe('text');
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.format).toBe('pdf');
+      expect(payload.text).toContain('Hello PDF World');
+      expect(payload.pages).toBe(1);
+    });
+
+    test('DOCX を text 化', async () => {
+      client.getMessageMedia.mockResolvedValue(fixtureMedia(
+        'sample.docx',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ));
+      const result = await server.callTool('read_document', { message_id: 'msg-docx-1' });
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.format).toBe('docx');
+      expect(payload.text).toContain('Hello DOCX World');
+    });
+
+    test('XLSX を sheet ごと text 化、sheet 名を返す', async () => {
+      client.getMessageMedia.mockResolvedValue(fixtureMedia(
+        'sample.xlsx',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      ));
+      const result = await server.callTool('read_document', { message_id: 'msg-xlsx-1' });
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.format).toBe('xlsx');
+      expect(payload.text).toContain('Alice');
+      expect(payload.text).toContain('apple');
+      // sheets メタは name のみ (rows binary は重いので tool 応答からは外す)
+      expect(payload.sheets).toEqual([
+        { name: 'Members' },
+        { name: 'Inventory' },
+      ]);
+    });
+
+    test('未対応 format は warning 付き unsupported を返す', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'video',
+        mime_type: 'video/mp4',
+        file_name: 'movie.mp4',
+        file_size: 1000,
+        data_base64: 'AAAA',
+      });
+      const result = await server.callTool('read_document', { message_id: 'msg-vid-1' });
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.format).toBe('unsupported');
+      expect(payload.warning).toContain('未対応');
+    });
+
+    test('error 応答を text で返す', async () => {
+      client.getMessageMedia.mockResolvedValue({ error: 'メッセージが見つかりません' });
+      const result = await server.callTool('read_document', { message_id: 'unknown' });
       expect(result.content[0].text).toContain('エラー');
       expect(result.content[0].text).toContain('メッセージが見つかりません');
     });
