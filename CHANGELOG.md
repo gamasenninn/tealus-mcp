@@ -10,6 +10,30 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-05-04
+
+### Added
+
+- **read_document に Vision API fallback (Gemini) を統合 — scan PDF / image-only PDF 対応** ([tealus#233](https://github.com/gamasenninn/tealus/issues/233))
+  - v0.8.1 で scan PDF を heuristic 検出 (空白除外 < 50 chars) するようになったが、内容を読む手段がなかった
+  - v0.9.0 で Gemini API multimodal を fallback として組み込み、scan PDF も自動で text 化
+  - 採用者は `GOOGLE_API_KEY` env を設定すれば自動で有効化、unset / `DOCUMENT_VISION_PROVIDER=none` で disable
+  - **応答 schema 拡張**: `extraction_method: "library" \| "vision_gemini"` で透過性確保。`model` field も付加
+  - 自動 chain: `extractPdf` で text 取れない時のみ vision を呼ぶ (digital PDF は library で完結、cost 保護)
+  - **Privacy 注意**: Gemini free tier は Google が製品改善に利用、human reviewer が input/output を処理する可能性あり。社内文書を扱う場合は paid billing account に紐付けた key 推奨
+  - Default model: `gemini-2.5-flash-lite` (free tier 1,000 RPD / 15 RPM が最 generous)
+  - Cost protection: `DOCUMENT_VISION_MAX_PAGES=20` (default、超過時は vision skip + warning)
+  - Approach 1 (deterministic library) は依然 default、scan 検出時のみ Approach 2 (Gemini) に escalate
+
+### Dependencies
+
+- 追加: `@google/genai@^1.51.0` (公式 Gemini Node.js SDK、新 unified package)
+
+### Tests
+
+- 54 → **65** (+11、visionFallback.test.js 8 件 + documentReader.test.js chain 3 件)
+- Gemini SDK は `jest.doMock` で network 呼び出しなしで mock、CI 安全
+
 ## [0.8.1] - 2026-05-04
 
 ### Fixed

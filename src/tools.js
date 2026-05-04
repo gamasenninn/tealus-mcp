@@ -237,6 +237,8 @@ function registerTools(server, client) {
           text: JSON.stringify({
             text: result.text,
             format: result.format,
+            ...(result.extraction_method ? { extraction_method: result.extraction_method } : {}),
+            ...(result.model ? { model: result.model } : {}),
             ...(result.pages !== undefined ? { pages: result.pages } : {}),
             ...(result.sheets !== undefined ? { sheets: result.sheets.map(s => ({ name: s.name })) } : {}),
             ...(result.truncated ? { truncated: true } : {}),

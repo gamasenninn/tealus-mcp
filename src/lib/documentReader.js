@@ -13,6 +13,7 @@
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const ExcelJS = require('exceljs');
+const visionFallback = require('./visionFallback');
 
 const MAX_BINARY_BYTES = 10 * 1024 * 1024;   // 10MB
 const MAX_TEXT_LENGTH = 1_000_000;            // 1M chars (token 換算 ~250K、prompt 上限保護)
@@ -51,17 +52,44 @@ async function extractPdf(buffer) {
     parseError = err.message;
   }
   const { text, truncated } = truncateText(rawText);
-  const result = { format: 'pdf', text, pages, truncated };
+  const result = { format: 'pdf', text, pages, truncated, extraction_method: 'library' };
   if (parseError) {
     result.warning = `PDF 解析エラー: ${parseError}`;
-  } else {
-    // scan PDF / image-only PDF は pdf-parse が pages 数や構造は読めるが
-    // 本文文字を抽出できず空白のみ返すケースがある (例: 270 chars で全部 \n)。
-    // 生 length ではなく **空白を除いた文字数** で判定。
-    const nonWsLength = text.replace(/\s/g, '').length;
-    if (nonWsLength < MIN_TEXT_LENGTH_FOR_OK) {
-      result.warning = `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF の可能性。Approach 2 (Vision API fallback) は別 issue で対応予定`;
+    return result;
+  }
+
+  // scan PDF / image-only PDF は pdf-parse が pages 数や構造は読めるが
+  // 本文文字を抽出できず空白のみ返すケースがある (例: 270 chars で全部 \n)。
+  // 生 length ではなく **空白を除いた文字数** で判定。
+  const nonWsLength = text.replace(/\s/g, '').length;
+  if (nonWsLength >= MIN_TEXT_LENGTH_FOR_OK) {
+    return result;
+  }
+
+  // scan PDF 検出 — Phase 2: Vision API fallback (#233)
+  if (visionFallback.isVisionEnabled()) {
+    // pdf-parse が空白だけ返した buffer をそのまま Gemini に渡す
+    // (scan PDF は内部に画像 stream を持つため、Gemini が直接 OCR 相当の処理をする)
+    const vision = await visionFallback.extractTextWithGemini(
+      { data_base64: buffer.toString('base64'), mime_type: 'application/pdf' },
+      { pages }
+    );
+    if (vision.enabled && vision.text) {
+      const vt = truncateText(vision.text);
+      return {
+        format: 'pdf',
+        text: vt.text,
+        pages,
+        truncated: vt.truncated,
+        extraction_method: `vision_${vision.provider}`,
+        model: vision.model,
+        ...(vision.warning ? { warning: vision.warning } : {}),
+      };
     }
+    // vision call 失敗 / disabled
+    result.warning = `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF と判定し Vision API fallback を試みたが失敗 (${vision.warning || vision.reason || 'unknown'})`;
+  } else {
+    result.warning = `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF の可能性。Vision API fallback は GOOGLE_API_KEY 未設定のため無効 (${process.env.DOCUMENT_VISION_PROVIDER || 'auto'})`;
   }
   return result;
 }
@@ -76,7 +104,7 @@ async function extractDocx(buffer) {
     parseError = err.message;
   }
   const { text, truncated } = truncateText(rawText);
-  const result = { format: 'docx', text, truncated };
+  const result = { format: 'docx', text, truncated, extraction_method: 'library' };
   if (parseError) {
     result.warning = `DOCX 解析エラー: ${parseError}`;
   }
@@ -113,7 +141,7 @@ async function extractXlsx(buffer) {
 
   const combined = sheets.map(s => `=== sheet: ${s.name} ===\n${s.rows}`).join('\n\n');
   const { text, truncated } = truncateText(combined);
-  const result = { format: 'xlsx', text, sheets, truncated };
+  const result = { format: 'xlsx', text, sheets, truncated, extraction_method: 'library' };
   if (parseError) {
     result.warning = `XLSX 解析エラー: ${parseError}`;
   }

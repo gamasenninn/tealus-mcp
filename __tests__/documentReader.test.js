@@ -173,6 +173,85 @@ describe('extractText - scan PDF heuristic', () => {
   });
 });
 
+describe('extractText - vision fallback chain (#233)', () => {
+  const origKey = process.env.GOOGLE_API_KEY;
+  afterEach(() => {
+    if (origKey === undefined) delete process.env.GOOGLE_API_KEY;
+    else process.env.GOOGLE_API_KEY = origKey;
+    jest.resetModules();
+  });
+
+  test('scan PDF + GOOGLE_API_KEY あり → vision fallback が呼ばれて text が返る', async () => {
+    process.env.GOOGLE_API_KEY = 'test-key';
+    jest.resetModules();
+    // pdf-parse: scan PDF を simulate (空白だけ返す)
+    jest.doMock('pdf-parse', () => async () => ({ text: '\n\n\n', numpages: 5 }));
+    // Gemini: 成功応答
+    jest.doMock('@google/genai', () => ({
+      GoogleGenAI: jest.fn().mockImplementation(() => ({
+        models: {
+          generateContent: jest.fn().mockResolvedValue({
+            text: 'スキャン PDF から抽出した本文です',
+          }),
+        },
+      })),
+    }));
+    const { extractText } = require('../src/lib/documentReader');
+    const result = await extractText({
+      data_base64: Buffer.from('%PDF-1.4\n').toString('base64'),
+      mime_type: 'application/pdf',
+      file_name: 'scan.pdf',
+    });
+    expect(result.format).toBe('pdf');
+    expect(result.extraction_method).toBe('vision_gemini');
+    expect(result.text).toBe('スキャン PDF から抽出した本文です');
+    expect(result.pages).toBe(5);
+    jest.dontMock('pdf-parse');
+    jest.dontMock('@google/genai');
+  });
+
+  test('scan PDF + GOOGLE_API_KEY なし → warning で fallback 案内', async () => {
+    delete process.env.GOOGLE_API_KEY;
+    jest.resetModules();
+    jest.doMock('pdf-parse', () => async () => ({ text: '\n\n\n', numpages: 7 }));
+    const { extractText } = require('../src/lib/documentReader');
+    const result = await extractText({
+      data_base64: Buffer.from('%PDF-1.4\n').toString('base64'),
+      mime_type: 'application/pdf',
+      file_name: 'scan.pdf',
+    });
+    expect(result.format).toBe('pdf');
+    expect(result.extraction_method).toBe('library');
+    expect(result.warning).toMatch(/GOOGLE_API_KEY 未設定/);
+    jest.dontMock('pdf-parse');
+  });
+
+  test('digital PDF (text 取れる) → vision fallback 呼ばれない', async () => {
+    process.env.GOOGLE_API_KEY = 'test-key';
+    jest.resetModules();
+    const generateContentMock = jest.fn();
+    jest.doMock('@google/genai', () => ({
+      GoogleGenAI: jest.fn().mockImplementation(() => ({
+        models: { generateContent: generateContentMock },
+      })),
+    }));
+    const { extractText } = require('../src/lib/documentReader');
+    // 実 sample.pdf (Hello PDF World) で digital
+    const fs = require('fs');
+    const path = require('path');
+    const buffer = fs.readFileSync(path.join(__dirname, 'fixtures', 'sample.pdf'));
+    const result = await extractText({
+      data_base64: buffer.toString('base64'),
+      mime_type: 'application/pdf',
+      file_name: 'sample.pdf',
+    });
+    expect(result.extraction_method).toBe('library');
+    expect(result.text).toContain('Hello PDF World');
+    expect(generateContentMock).not.toHaveBeenCalled();
+    jest.dontMock('@google/genai');
+  });
+});
+
 describe('extractText - error handling', () => {
   test('破損 PDF は format pdf + warning で返す (例外を上に投げない)', async () => {
     const media = {

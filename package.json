@@ -1,6 +1,6 @@
 {
   "name": "tealus-mcp",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Tealus MCP Server — Tealus Bot API as MCP tools (send_message / send_image / get_messages / get_message_media / read_document / search_messages / mark_tag_done / create_room / delete_room / list_rooms / join_room / mark_read). Install with: npx -y github:gamasenninn/tealus-mcp",
   "license": "MIT",
   "author": "Satoshi Ono",
@@ -47,6 +47,7 @@
     ]
   },
   "dependencies": {
+    "@google/genai": "^1.51.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "exceljs": "^4.4.0",
     "form-data": "^4.0.0",
