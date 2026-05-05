@@ -115,7 +115,23 @@ function registerTools(server, client) {
     }
   );
 
-  // 8. mark_tag_done
+  // 8. list_tags (#254 — discovery primitive)
+  server.tool(
+    'list_tags',
+    'Bot がメンバーである全 room の tag 一覧を usage 順 (利用回数 desc) で返す。' +
+    'tag 名を知らない時に search_messages の前段で discovery として使う (= 「正解の tag 名を当てるゲーム」を防ぐ)。' +
+    'is_todo=true の tag は TODO 系 (search_messages の tag_names + is_done filter で進捗管理可能)。' +
+    'response: { tags: [{ name, is_todo, total_usage }] }',
+    {
+      limit: z.number().min(1).max(100).optional().describe('取得件数 (default 30、max 100)'),
+    },
+    async ({ limit }) => {
+      const result = await client.getTags(limit);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // 9. mark_tag_done
   server.tool(
     'mark_tag_done',
     'メッセージに付いた特定タグの完了状態 (is_done) を更新する。' +

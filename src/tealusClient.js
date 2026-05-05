@@ -105,6 +105,12 @@ class TealusClient {
     return this.request('GET', `/bot/search?${qs.toString()}`);
   }
 
+  async getTags(limit = 30) {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(limit));
+    return this.request('GET', `/bot/tags?${qs.toString()}`);
+  }
+
   async markTagDone(messageId, tagName, isDone) {
     return this.request(
       'PATCH',

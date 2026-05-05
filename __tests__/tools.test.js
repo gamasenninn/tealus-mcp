@@ -32,6 +32,7 @@ function createMockClient() {
     markRead: jest.fn().mockResolvedValue({ success: true, count: 2 }),
     getMessageMedia: jest.fn(),
     searchMessages: jest.fn(),
+    getTags: jest.fn().mockResolvedValue({ tags: [{ name: 'tealus関係', is_todo: true, total_usage: 20 }] }),
     markTagDone: jest.fn(),
     createRoom: jest.fn(),
     deleteRoom: jest.fn(),
@@ -47,9 +48,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('12ツールが登録される', () => {
+  test('13ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(12);
+    expect(Object.keys(tools)).toHaveLength(13);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -58,10 +59,26 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('mark_read');
     expect(tools).toHaveProperty('get_message_media');
     expect(tools).toHaveProperty('search_messages');
+    expect(tools).toHaveProperty('list_tags');
     expect(tools).toHaveProperty('mark_tag_done');
     expect(tools).toHaveProperty('create_room');
     expect(tools).toHaveProperty('delete_room');
     expect(tools).toHaveProperty('read_document');
+  });
+
+  test('list_tags が tag 一覧を取得する', async () => {
+    const result = await server.callTool('list_tags', { limit: 30 });
+    expect(client.getTags).toHaveBeenCalledWith(30);
+    expect(result.content[0].type).toBe('text');
+    const data = JSON.parse(result.content[0].text);
+    expect(data.tags).toHaveLength(1);
+    expect(data.tags[0].name).toBe('tealus関係');
+    expect(data.tags[0].is_todo).toBe(true);
+  });
+
+  test('list_tags は limit 省略可能', async () => {
+    await server.callTool('list_tags', {});
+    expect(client.getTags).toHaveBeenCalledWith(undefined);
   });
 
   test('send_message がメッセージを送信する', async () => {

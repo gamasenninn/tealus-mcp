@@ -10,6 +10,22 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-05
+
+### Added
+
+- **`list_tags` tool — bot メンバー全 room の tag 一覧を usage 順で返す discovery primitive** ([tealus#254](https://github.com/gamasenninn/tealus/issues/254))
+  - 背景: LLM が `search_messages` で tag_names filter を使う時、tag 名を知らないと「正解の名前を当てるゲーム」を強いられる構造的問題があった (実例: 5/5 セッションで「tealus関係」tag を 5 候補 guess して全 miss、user に教えてもらい解決)
+  - 教訓: LLM 向け MCP は CRUD だけでなく **list / discovery primitive** が必須。人間 UI には autocomplete があるが MCP では明示が必要
+  - **新 server endpoint** `GET /api/bot/tags?limit=N` (tealus 本体側、bot JWT scope)
+  - **新 MCP tool** `list_tags({ limit })`: response `{ tags: [{ name, is_todo, total_usage }] }`
+  - tools 12 → 13、tests 65 → 67 (+2 件: list_tags handler + limit 省略)
+  - 既存の `search_messages` / `mark_tag_done` と組み合わせて「discover → search → mark done」の閉じた flow が完成
+
+### Tests
+
+- 65 → **67** (+2、list_tags の handler / optional limit)
+
 ## [0.9.0] - 2026-05-04
 
 ### Added
