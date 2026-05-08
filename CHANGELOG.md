@@ -10,6 +10,18 @@
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-05-08
+
+### Fixed
+
+- **`read_document`: pdf-parse の parseError も vision fallback の trigger 条件に追加** (tealus#262 Phase 2)
+  - 旧実装は `pdf-parse` が解析エラー (例: "Invalid PDF structure" / "bad XRef entry") を投げると即 return していたため、**vision fallback path が skip** されていた
+  - tealus#262 (E2E harness) で発覚: pdf-lib / pdfkit / 一部の hand-crafted PDF は pdf.js v1.10.100 で parseError を起こすが、Gemini Vision なら image stream として処理可能なケースがある
+  - 修正: parseError も「library で本文取れなかった」signal として扱い、vision fallback path に流す。fallback 成功時 `extraction_method=vision_gemini` を返す
+  - warning text も `pdf-parse error: ... (image-only PDF / 構造破損の可能性)` 形式に拡張、診断容易に
+  - 既存の「nonWsLength < 50」path と equivalent な扱い、Light v1 / v2 両方で恩恵
+  - 70 件 → 71 件 test (parseError → vision fallback の専用 case 追加)
+
 ### Documentation
 
 - **README に env 名の trap 警告 section を追加** (採用者保護、tealus#267)

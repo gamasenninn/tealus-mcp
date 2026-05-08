@@ -171,6 +171,31 @@ describe('extractText - scan PDF heuristic', () => {
     expect(result.warning).toMatch(/空白除外/);
     jest.dontMock('pdf-parse');
   });
+
+  test('pdf-parse の parseError も vision fallback path に流れる (tealus#262 修正)', async () => {
+    // 旧実装は parseError 即 return していたため、image-only / 構造異常な PDF
+    // (pdf-lib / pdfkit の出力等) で vision fallback が skip されていた。
+    // 新実装は parseError も image-only PDF の signal とみなして fallback 試行。
+    jest.resetModules();
+    jest.doMock('pdf-parse', () => async () => {
+      throw new Error('Invalid PDF structure');
+    });
+    const { extractText: extractTextMocked } = require('../src/lib/documentReader');
+    const result = await extractTextMocked({
+      type: 'file',
+      data_base64: Buffer.from('%PDF-1.4\n').toString('base64'),
+      mime_type: 'application/pdf',
+      file_name: 'broken-or-image-only.pdf',
+      file_size: 9,
+    });
+    // Vision fallback が disabled (GOOGLE_API_KEY 未設定) でも、warning に
+    // parseError + vision 試行の事実が反映される
+    expect(result.format).toBe('pdf');
+    expect(result.warning).toMatch(/pdf-parse error/);
+    expect(result.warning).toMatch(/image-only PDF \/ 構造破損の可能性/);
+    expect(result.warning).toMatch(/Vision API fallback/);
+    jest.dontMock('pdf-parse');
+  });
 });
 
 describe('extractText - vision fallback chain (#233)', () => {

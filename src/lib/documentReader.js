@@ -53,17 +53,18 @@ async function extractPdf(buffer) {
   }
   const { text, truncated } = truncateText(rawText);
   const result = { format: 'pdf', text, pages, truncated, extraction_method: 'library' };
-  if (parseError) {
-    result.warning = `PDF 解析エラー: ${parseError}`;
+
+  // pdf-parse の parseError or 抽出量極小 (空白のみ) はどちらも
+  // 「library で本文取れなかった」状態。両方 vision fallback を試す。
+  // 旧実装は parseError 即 return して fallback skip していた (tealus#262 で発覚)。
+  // 修正: 解析エラーも image-only / 構造異常な PDF の signal とみなして fallback path へ流す。
+  const nonWsLength = text.replace(/\s/g, '').length;
+  if (!parseError && nonWsLength >= MIN_TEXT_LENGTH_FOR_OK) {
     return result;
   }
 
-  // scan PDF / image-only PDF は pdf-parse が pages 数や構造は読めるが
-  // 本文文字を抽出できず空白のみ返すケースがある (例: 270 chars で全部 \n)。
-  // 生 length ではなく **空白を除いた文字数** で判定。
-  const nonWsLength = text.replace(/\s/g, '').length;
-  if (nonWsLength >= MIN_TEXT_LENGTH_FOR_OK) {
-    return result;
+  if (parseError) {
+    result.warning = `PDF 解析エラー: ${parseError} (vision fallback を試行)`;
   }
 
   // scan PDF 検出 — Phase 2: Vision API fallback (#233)
@@ -87,9 +88,15 @@ async function extractPdf(buffer) {
       };
     }
     // vision call 失敗 / disabled
-    result.warning = `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF と判定し Vision API fallback を試みたが失敗 (${vision.warning || vision.reason || 'unknown'})`;
+    const symptom = parseError
+      ? `pdf-parse error: ${parseError} (image-only PDF / 構造破損の可能性)`
+      : `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF の可能性`;
+    result.warning = `${symptom}。Vision API fallback を試みたが失敗 (${vision.warning || vision.reason || 'unknown'})`;
   } else {
-    result.warning = `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF の可能性。Vision API fallback は GOOGLE_API_KEY 未設定のため無効 (${process.env.DOCUMENT_VISION_PROVIDER || 'auto'})`;
+    const symptom = parseError
+      ? `pdf-parse error: ${parseError} (image-only PDF / 構造破損の可能性)`
+      : `text 抽出量が極端に少ない (空白除外 ${nonWsLength} chars / pages=${pages})。scan PDF / image-only PDF の可能性`;
+    result.warning = `${symptom}。Vision API fallback は GOOGLE_API_KEY 未設定のため無効 (${process.env.DOCUMENT_VISION_PROVIDER || 'auto'})`;
   }
   return result;
 }
