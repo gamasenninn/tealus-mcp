@@ -10,6 +10,14 @@
 
 ## [Unreleased]
 
+### Documentation
+
+- **README に env 名の trap 警告 section を追加** (採用者保護、tealus#267)
+  - 5/8 採用者第 1 号 (藤井さん) dogfood で `API_URL` (prefix なし) を書いて silent fail する trap を踏んだ
+  - tealus-mcp は `TEALUS_` prefix 付き env のみ読込 (multi-MCP 環境での衝突回避設計) のため、短縮名は無視されて default `localhost:3000` に fallback、エラーになる
+  - README の「環境変数」section に警告 callout (❌/✅ 比較 + エラー症状 + 再起動の必要性) を追加
+  - 同 trap は memory `feedback_tealus_mcp_env_naming.md` でも記録 (Claude Code 側の再発防止)
+
 ## [0.11.0] - 2026-05-08
 
 ### Added

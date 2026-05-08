@@ -36,6 +36,28 @@ Claude Code / Cursor / その他 MCP 対応 AI クライアントから、Tealus
 
 bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作成する。
 
+> ⚠️ **採用者が踏みやすい trap — env 名は `TEALUS_` prefix 必須**
+>
+> ```json
+> // ❌ 間違い (silent fail、localhost にフォールバックして「reach できない」エラー)
+> "env": {
+>   "API_URL": "http://192.168.x.x:3000",   // ← prefix なし
+>   "USER_ID": "AI_AGENT",
+>   "PASSWORD": "..."
+> }
+>
+> // ✅ 正しい
+> "env": {
+>   "TEALUS_API_URL": "http://192.168.x.x:3000",
+>   "TEALUS_USER_ID": "AI_AGENT",
+>   "TEALUS_PASSWORD": "..."
+> }
+> ```
+>
+> tealus-mcp は **`TEALUS_` prefix 付き env のみ** 読み込む (multi-MCP 環境で他 server の env と衝突回避のため)。短い名前 (`API_URL` 等) を書くと無視されて default `http://localhost:3000` に fallback、ローカルに Tealus server がないと「`http://localhost:3000/api/auth/login` に reach できない」エラーが出る。
+>
+> エラーが出たらまず **env 名を確認**。直したら MCP クライアント (Claude Code / Cursor 等) を **再起動** (MCP config は startup 時のみ読込)。
+
 ## 提供ツール
 
 | Tool | 用途 |
