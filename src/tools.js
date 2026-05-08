@@ -236,7 +236,91 @@ function registerTools(server, client) {
     }
   );
 
-  // 12. read_document
+  // 12. send_text_as_file (#260)
+  // Light v1 の custom tool `share_text_as_file` を MCP 化、Light v2 (codex)
+  // からも同じ動作で使えるようにする。長文の text (要約 / レポート / コード等) を
+  // file 添付として投稿、chat 表示が肥大しない。
+  server.tool(
+    'send_text_as_file',
+    'Tealus のルームに text 内容を file (.txt / .md 等) として送信する。長文の要約 / レポート / コード等で chat 流れを切らずに添付したい時に使う。',
+    {
+      room_id: z.string().describe('送信先ルームID'),
+      content: z.string().describe('file の内容 (text)'),
+      filename: z.string().describe('ファイル名 (拡張子付き、例: summary.md, report.txt, output.py)'),
+      mime_type: z.string().optional().describe('MIME type (default: text/plain、.md なら text/markdown 等)'),
+      caption: z.string().optional().describe('添付メッセージ text (任意、添付理由などの 1-2 行説明)'),
+    },
+    async ({ room_id, content, filename, mime_type, caption }) => {
+      const buffer = Buffer.from(content, 'utf-8');
+      const mt = mime_type || (filename.endsWith('.md') ? 'text/markdown' : 'text/plain');
+      const result = await client.pushFile(room_id, buffer, filename, mt, caption || '');
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // 13. generate_and_send_image (#260)
+  // Light v1 の custom tool `generate_image` を MCP 化、DALL-E 3 で画像生成 →
+  // Tealus に投稿する composite action。Light v2 (codex SDK 経由) からも使える。
+  // OPENAI_API_KEY を env で必要 (Light v2 が subscription mode でも image gen は API 経由)。
+  server.tool(
+    'generate_and_send_image',
+    'DALL-E 3 で画像を生成して Tealus のルームに送信する。prompt は英語が DALL-E 的に精度高い (日本語 OK だが意訳される)。OPENAI_API_KEY env が必要。',
+    {
+      room_id: z.string().describe('送信先ルームID'),
+      prompt: z.string().describe('画像生成 prompt (英語推奨、日本語可)'),
+      size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional().describe('画像サイズ (default: 1024x1024)'),
+      caption: z.string().optional().describe('画像に添える caption text (任意)'),
+    },
+    async ({ room_id, prompt, size, caption }) => {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return { content: [{ type: 'text', text: 'エラー: OPENAI_API_KEY が設定されていません。tealus-mcp 起動環境に env を追加してください。' }] };
+      }
+      try {
+        const genRes = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'dall-e-3',
+            prompt,
+            size: size || '1024x1024',
+            n: 1,
+            response_format: 'b64_json',
+          }),
+        });
+        const genData = await genRes.json();
+        if (genData.error) {
+          return { content: [{ type: 'text', text: `画像生成エラー: ${genData.error.message || JSON.stringify(genData.error)}` }] };
+        }
+        const b64 = genData.data?.[0]?.b64_json;
+        const revisedPrompt = genData.data?.[0]?.revised_prompt || prompt;
+        if (!b64) {
+          return { content: [{ type: 'text', text: `画像生成エラー: 応答に b64_json なし: ${JSON.stringify(genData).slice(0, 200)}` }] };
+        }
+        const buffer = Buffer.from(b64, 'base64');
+        const filename = `generated-${Date.now()}.png`;
+        const result = await client.pushImage(room_id, buffer, filename, caption || '');
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              message: result.message,
+              image_size: buffer.length,
+              filename,
+              revised_prompt: revisedPrompt,
+            }, null, 2),
+          }],
+        };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `画像生成 / 送信エラー: ${err.message}` }] };
+      }
+    }
+  );
+
+  // 14. read_document
   server.tool(
     'read_document',
     'Tealus メッセージに添付された PDF/DOCX/XLSX を text 化して返す。get_message_media がメタ情報のみ返すのに対し、本 tool は文書本文を text として抽出する。',

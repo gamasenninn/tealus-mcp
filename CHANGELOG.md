@@ -10,6 +10,30 @@
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-08
+
+### Added
+
+- **`send_text_as_file` tool — Light v2 機能 parity (Phase 1/2)** ([tealus#260](https://github.com/gamasenninn/tealus/issues/260))
+  - 長文 text を file (.txt / .md 等) として Tealus 投稿、chat 流れを切らず添付
+  - args: `room_id`, `content`, `filename`, `mime_type?`, `caption?`
+  - mime_type 省略時は `.md` → `text/markdown`、それ以外 → `text/plain` auto detect
+  - 背景: Light v1 の custom tool `share_text_as_file` を MCP 化、Light v2 (codex SDK) からも同じ動作で使えるようにする ([tealus#258](https://github.com/gamasenninn/tealus/issues/258) D5 で TODO 化済)
+
+- **`generate_and_send_image` tool — Light v2 機能 parity (Phase 2/2)** ([tealus#260](https://github.com/gamasenninn/tealus/issues/260))
+  - DALL-E 3 で画像生成 → Tealus 投稿の composite action
+  - args: `room_id`, `prompt`, `size?` ('1024x1024' / '1792x1024' / '1024x1792')、`caption?`
+  - response: `{ message, image_size, filename, revised_prompt }`
+  - 背景: Light v1 の custom tool `generate_image` を MCP 化。Light v2 (codex SDK) は image gen built-in なし、5/7 dogfood で `/light2 子犬の画像を生成して` が `no final agent message captured` で fail、本 tool で解消
+  - **OPENAI_API_KEY env 必須** (subscription mode の Light v2 でも image gen は API 経由、別 cost)
+
+- **TealusClient に `pushFile` method 追加** — `POST /api/bot/push-file` の wrapper
+
+### Changed
+
+- tools 13 → **15** (+2: send_text_as_file, generate_and_send_image)
+- package.json description に新 tool 名を反映
+
 ## [0.10.0] - 2026-05-05
 
 ### Added

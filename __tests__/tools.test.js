@@ -48,9 +48,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('13ツールが登録される', () => {
+  test('15ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(13);
+    expect(Object.keys(tools)).toHaveLength(15);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -64,6 +64,53 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('create_room');
     expect(tools).toHaveProperty('delete_room');
     expect(tools).toHaveProperty('read_document');
+    expect(tools).toHaveProperty('send_text_as_file');
+    expect(tools).toHaveProperty('generate_and_send_image');
+  });
+
+  test('send_text_as_file は pushFile を呼ぶ', async () => {
+    client.pushFile = jest.fn().mockResolvedValue({
+      message: { id: 'msg-id', content: 'cap', type: 'file' },
+    });
+    const result = await server.callTool('send_text_as_file', {
+      room_id: 'room-1',
+      content: '# Heading\n\nbody text',
+      filename: 'output.md',
+      caption: 'attached',
+    });
+    expect(client.pushFile).toHaveBeenCalled();
+    const args = client.pushFile.mock.calls[0];
+    expect(args[0]).toBe('room-1');                          // roomId
+    expect(Buffer.isBuffer(args[1])).toBe(true);             // buffer
+    expect(args[1].toString('utf-8')).toBe('# Heading\n\nbody text');
+    expect(args[2]).toBe('output.md');                       // filename
+    expect(args[3]).toBe('text/markdown');                   // mime auto-detect for .md
+    expect(args[4]).toBe('attached');                        // caption
+    expect(result.content[0].type).toBe('text');
+  });
+
+  test('send_text_as_file は .md 以外を text/plain として扱う', async () => {
+    client.pushFile = jest.fn().mockResolvedValue({ message: {} });
+    await server.callTool('send_text_as_file', {
+      room_id: 'r',
+      content: 'plain',
+      filename: 'note.txt',
+    });
+    expect(client.pushFile.mock.calls[0][3]).toBe('text/plain');
+  });
+
+  test('generate_and_send_image は OPENAI_API_KEY 不足でエラーを返す', async () => {
+    const orig = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      const result = await server.callTool('generate_and_send_image', {
+        room_id: 'r',
+        prompt: 'a cat',
+      });
+      expect(result.content[0].text).toMatch(/OPENAI_API_KEY/);
+    } finally {
+      if (orig) process.env.OPENAI_API_KEY = orig;
+    }
   });
 
   test('list_tags が tag 一覧を取得する', async () => {

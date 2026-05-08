@@ -69,6 +69,24 @@ class TealusClient {
     return res.json();
   }
 
+  async pushFile(roomId, buffer, filename, mimeType, content = '') {
+    await this.login();
+    const form = new FormData();
+    form.append('room_id', roomId);
+    form.append('file', buffer, { filename, contentType: mimeType });
+    if (content) form.append('content', content);
+
+    const res = await fetch(`${this.apiUrl}/api/bot/push-file`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        ...form.getHeaders(),
+      },
+      body: form,
+    });
+    return res.json();
+  }
+
   async getMessages(roomId, limit = 20, options = {}) {
     const { includeTranscription, includeRaw } = options;
     const params = new URLSearchParams({ room_id: roomId, limit: String(limit) });
