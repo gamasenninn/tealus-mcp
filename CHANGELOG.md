@@ -10,6 +10,27 @@
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-05-10
+
+### Fixed
+
+- **HTTP transport: stateful session management に変更 — Claude Code 等の proper MCP client で「tools fetch failed」になる bug を fix** ([tealus#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha follow-up)
+  - 5/10 Test 6 で Claude Code の `/mcp` で「connected · tools fetch failed」になる問題が surface
+  - 真因: v0.12.0-v0.12.2 は per-request transport (stateless mode) で、initialize と tools/list が **別 transport instance** に dispatch されていた。SDK の `Protocol.connect()` (`shared/protocol.js:219-222`) は **single-transport 設計** で `_transport` 既設時に throw、また「initialized 状態」を transport instance に紐付けて管理するため、別 instance で tools/list が来ると「not initialized」状態として失敗
+  - curl/supertest は単発 request 完結なので問題なし、Claude Code のような proper MCP client は initialize → tools/list 連続呼びで失敗 (Test 6 で発覚)
+  - **修正**: stateful session management に切替。`Map<sessionId, transport>` を保持、initialize 時に新 transport + 新 McpServer instance を生成、後続 request は `Mcp-Session-Id` header で同 transport へ dispatch、`transport.onclose` で auto cleanup
+  - **設計判断**: SDK 制約 ("use a separate Protocol instance per connection") に従い session ごとに **新 McpServer instance** を生成。tool registration cost を許容、Phase 1 alpha 範囲では問題なし
+  - `index.js` も `mcpServer` 直渡し → `mcpServerFactory` に変更 (stdio 側は 1 回 only で従来通り)
+
+### Changed
+
+- **API**: `startHttpServer({ mcpServer, ... })` → `startHttpServer({ mcpServerFactory, ... })` に signature 変更 (breaking、ただし内部 API、外部利用想定なし)
+- **Tests**: httpServer.test.js を stateful pattern に合わせて書き直し、84 件 → 86 件 pass (session lifecycle 系 test 追加)
+
+### Note
+
+本 release は v0.12.0-v0.12.2 の **重要な fix**。HTTP transport を実利用する場合は v0.12.3 以上必須。stdio path は無影響、既存採用者は impact なし。
+
 ## [0.12.2] - 2026-05-10
 
 ### Added

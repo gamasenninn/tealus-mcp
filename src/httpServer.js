@@ -1,34 +1,50 @@
 /**
  * HTTP transport for tealus-mcp (#264 Phase 1 alpha)
  *
- * StreamableHTTPServerTransport を Express でラップ。per-request transport instance pattern
- * (spike L1 で実証済、shared transport は tools/list で 500 になる)。
+ * StreamableHTTPServerTransport を **stateful session management** で運用。
  *
- * Phase 1 alpha scope: HTTP request/response のみ。SSE event broker (server → client wake-up)
- * は Phase 2 で別途。
+ * 設計:
+ *   - initialize 時: 新 transport + 新 McpServer instance を作成、Map に保存
+ *   - 後続 request: Mcp-Session-Id header で同 transport へ dispatch
+ *   - transport.onclose で auto cleanup (Map から削除)
+ *
+ * SDK 制約 (`shared/protocol.js:219-222`):
+ *   `Protocol.connect()` は `_transport` 既設時に throw。
+ *   → 1 McpServer = 1 transport の関係を厳守、session ごとに **新 McpServer instance** を生成。
+ *   → 高頻度 session の場合、tool registration の cost を許容する設計 (Phase 1 alpha 範囲では問題なし)。
+ *
+ * 5/10 Test 6 で Claude Code の `/mcp` で「tools fetch failed」が出た真因:
+ *   v0.12.0-v0.12.2 は per-request transport (stateless) で、initialize と
+ *   tools/list が **別 transport instance** になり SDK が「initialized 状態じゃない」と reject。
+ *   curl/supertest は単発 request で完結するので問題なかったが、proper MCP client
+ *   (Claude Code 等) は initialize → tools/list 連続呼びで失敗する。
+ *
+ * Phase 1 alpha scope: HTTP request/response (stateful session)。
+ * SSE event broker (server → client wake-up) は Phase 2 で別途。
  */
 const express = require('express');
+const { randomUUID } = require('node:crypto');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
+const { isInitializeRequest } = require('@modelcontextprotocol/sdk/types.js');
 const { createJwtAuth } = require('./middleware/jwtAuth');
 
 /**
  * @param {object} opts
- * @param {object} opts.mcpServer - 構築済 McpServer instance (tools 登録済)
- * @param {number} opts.port - listen port (default 3200)
+ * @param {() => object} opts.mcpServerFactory - 呼ぶたびに新 McpServer instance を返す factory。tools 登録済の状態で返すこと
+ * @param {number} opts.port - listen port
  * @param {string} opts.jwtSecret - Tealus 本体と共有する JWT secret
- * @param {object} [opts.logger] - { info, error } を持つ optional logger (default console)
- * @returns {Promise<{ app: import('express').Express, httpServer: import('http').Server }>}
+ * @param {object} [opts.logger]
+ * @returns {Promise<{ app, httpServer, transports }>}
  */
-async function startHttpServer({ mcpServer, port, jwtSecret, logger }) {
-  if (!mcpServer) throw new Error('startHttpServer: mcpServer is required');
+async function startHttpServer({ mcpServerFactory, port, jwtSecret, logger }) {
+  if (typeof mcpServerFactory !== 'function') throw new Error('startHttpServer: mcpServerFactory is required (function returning McpServer)');
   if (!jwtSecret) throw new Error('startHttpServer: jwtSecret is required');
   const log = logger || { info: (m) => console.error(m), error: (m) => console.error(m) };
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));
 
-  // /health (root) と /mcp/health (proxy 経由) 両方を expose、no auth (reachability check 用)
-  // standalone 直叩きでは /health、tealus 本体 proxy 経由では /mcp/health で到達可
+  // /health (root) と /mcp/health (proxy 経由) 両方を expose、no auth
   const healthHandler = (req, res) => {
     res.json({ status: 'ok', transport: 'http', server: 'tealus-mcp' });
   };
@@ -37,20 +53,53 @@ async function startHttpServer({ mcpServer, port, jwtSecret, logger }) {
 
   const jwtAuth = createJwtAuth(jwtSecret);
 
-  // MCP endpoint — per-request transport instance (spike L1 で確認済の必須 pattern)
+  // sessionId -> transport (stateful session 管理)
+  const transports = new Map();
+
   app.all('/mcp', jwtAuth, async (req, res) => {
     try {
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      // request 終了で transport も close (memory leak 防止)
-      res.on('close', () => {
-        transport.close().catch((err) => log.error(`[mcp] transport close error: ${err.message}`));
-      });
-      await mcpServer.connect(transport);
+      const sessionId = req.headers['mcp-session-id'];
+      let transport;
+
+      if (sessionId && transports.has(sessionId)) {
+        // 既存 session の継続 request
+        transport = transports.get(sessionId);
+      } else if (!sessionId && req.method === 'POST' && isInitializeRequest(req.body)) {
+        // 新規 session: 新 transport + 新 McpServer instance を作成
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (id) => {
+            transports.set(id, transport);
+            log.info(`[mcp] session initialized: ${id}`);
+          },
+        });
+        // transport.onclose は connect() 内で chain される (既存 callback も保持される)
+        transport.onclose = () => {
+          if (transport.sessionId && transports.has(transport.sessionId)) {
+            transports.delete(transport.sessionId);
+            log.info(`[mcp] session closed: ${transport.sessionId}`);
+          }
+        };
+        const sessionMcpServer = mcpServerFactory();
+        await sessionMcpServer.connect(transport);
+      } else {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+          id: null,
+        });
+        return;
+      }
+
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
       log.error(`[mcp] handleRequest error: ${err.stack || err.message}`);
       if (!res.headersSent) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: err.message },
+          id: null,
+        });
       }
     }
   });
@@ -59,7 +108,7 @@ async function startHttpServer({ mcpServer, port, jwtSecret, logger }) {
     const httpServer = app.listen(port, () => {
       log.info(`[tealus-mcp] HTTP transport listening on :${port}`);
       log.info(`[tealus-mcp] POST /mcp (JWT required), GET /health (no auth)`);
-      resolve({ app, httpServer });
+      resolve({ app, httpServer, transports });
     });
     httpServer.on('error', reject);
   });

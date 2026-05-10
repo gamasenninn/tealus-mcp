@@ -42,14 +42,15 @@ if (!userId || !password) {
   process.exit(1);
 }
 
-const server = new McpServer({
-  name: 'tealus',
-  version: '1.0.0',
-});
-
+// shared client (login state を session 跨いで共有、bot 認証は process 単位で 1 回)
 const client = new TealusClient({ apiUrl, userId, password });
 
-registerTools(server, client);
+// McpServer factory (HTTP の場合 session ごとに新 instance、stdio は 1 回 only)
+function createMcpServer() {
+  const s = new McpServer({ name: 'tealus', version: '1.0.0' });
+  registerTools(s, client);
+  return s;
+}
 
 async function main() {
   if (transport === 'http') {
@@ -61,9 +62,11 @@ async function main() {
     }
     const port = parseInt(process.env.MCP_HTTP_PORT || '3200', 10);
     const { startHttpServer } = require('./httpServer');
-    await startHttpServer({ mcpServer: server, port, jwtSecret });
+    // SDK 制約 (Protocol.connect は single-transport): session ごとに新 McpServer 必須
+    await startHttpServer({ mcpServerFactory: createMcpServer, port, jwtSecret });
   } else {
-    // stdio (default、既存動作不変)
+    // stdio (default、既存動作不変、1 connection only)
+    const server = createMcpServer();
     const stdio = new StdioServerTransport();
     await server.connect(stdio);
     console.error('Tealus MCP Server running on stdio');
