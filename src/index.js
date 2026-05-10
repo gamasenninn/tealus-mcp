@@ -6,7 +6,12 @@
  * Transport (#264 Phase 1 alpha):
  *   stdio (default、後方互換): node src/index.js
  *   http  (cross-machine):     node src/index.js --transport=http
+ *
+ * Env source 優先順 (dotenv default = no-override):
+ *   1. parent process env (npx stdio 起動時 MCP client が渡す env はここで先に set される)
+ *   2. cwd の .env (HTTP host mode で運用する時の便利機能、なければ silent skip)
  */
+require('dotenv').config();
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { TealusClient } = require('./tealusClient');

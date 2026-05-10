@@ -52,6 +52,16 @@ MCP_HTTP_PORT=3200 \
 node src/index.js --transport=http
 ```
 
+または `.env` ファイルに集約 (v0.12.1+):
+
+```bash
+cp .env.example .env
+# .env を編集して TEALUS_USER_ID / TEALUS_PASSWORD / JWT_SECRET / MCP_HTTP_PORT を埋める
+node src/index.js --transport=http
+```
+
+> 💡 dotenv は **parent process の env を override しない** ため、stdio mode (npx 経由で MCP client が env を渡す) には影響なし。HTTP host mode で運用する時の便利機能。
+
 Tealus 本体側 (port 3000) で `/mcp/*` proxy が必要 (`createProxyMiddleware` で `localhost:3200` に転送、tealus#264 参照)。
 
 **クライアント側設定** (MCP client の url-based config、JWT は Tealus 本体と shared):

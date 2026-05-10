@@ -10,6 +10,21 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-05-10
+
+### Added
+
+- **`.env` ファイル読み込み (dotenv)** — HTTP host mode 運用時の env 集約 ([tealus#264](https://github.com/gamasenninn/tealus/issues/264) follow-up)
+  - `src/index.js` の冒頭で `require('dotenv').config()` を呼び出し、cwd の `.env` を silent load
+  - **dotenv default = no-override** のため parent process env が先勝ち、stdio mode (npx 経由で MCP client が `env` で渡す setup) には **無影響** で共存
+  - `.env.example` を新規追加 (TEALUS_*、JWT_SECRET、MCP_HTTP_PORT、optional Gemini/OpenAI keys)、`package.json` `files` array に含めて npm publish 経路でも届く
+  - `.env` は既に `.gitignore` 済、新規 leak path なし
+  - HTTP host mode 起動の煩雑な `$env:VAR=...` 列挙が `.env` 1 file に集約可能、採用者 setup の友好度向上
+
+### Changed
+
+- `dependencies` に `dotenv` (^16.6.1) を追加 (production deps)
+
 ## [0.12.0] - 2026-05-10
 
 ### Added
