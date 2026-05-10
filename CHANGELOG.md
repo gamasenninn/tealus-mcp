@@ -10,6 +10,25 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-05-10
+
+### Added
+
+- **HTTP transport (`StreamableHTTPServerTransport`) サポート — cross-machine MCP 利用** ([tealus#264](https://github.com/gamasenninn/tealus/issues/264))
+  - `node src/index.js --transport=http` で HTTP server (default port 3200) を起動、stdio path は flag 無しで従来通り (default、後方互換維持)
+  - `@modelcontextprotocol/sdk` v1.29 の `StreamableHTTPServerTransport` を使用、SSE response (text/event-stream) で MCP wire 互換
+  - **per-request transport instance pattern** が必須 (shared transport は tools/list で 500、5 days dogfood + spike で実証済の制約)、`McpServer` のみ shared
+  - JWT auth middleware 内蔵 (`Authorization: Bearer <JWT>`)、Tealus 本体 (server / agent-server) と **同じ `JWT_SECRET` を共有**、検証は本 server 側で fail-fast 401 (anonymous fallback なし)
+  - `/health` (no auth) endpoint、proxy 経由では `/mcp/health` で reachability check 可
+  - 新 env: `JWT_SECRET` (HTTP mode 必須)、`MCP_HTTP_PORT` (default 3200)
+  - 採用者環境 (cross-machine) で agent-server と Claude Code が別マシンに居る case (5/8 藤井さん環境で surface した 192.168.11.10 ↔ .12 構成) の構造解決の足場、Phase 2 で SSE event broker (server → client wake-up) を別途追加予定
+  - 71 件 → 83 件 test (jwtAuth 6 + httpServer 6 追加)
+
+### Changed
+
+- **dependencies に `express` (^4.22.1) + `jsonwebtoken` (^9.0.3) を production deps として追加** — HTTP transport 用、stdio mode では import されない (lazy require、過去採用者の install 重量化を最小限に)
+- **devDependencies に `supertest` (^7.2.2) 追加** — `httpServer.test.js` で request-level test に使用
+
 ## [0.11.1] - 2026-05-08
 
 ### Fixed

@@ -26,6 +26,49 @@ Claude Code / Cursor / その他 MCP 対応 AI クライアントから、Tealus
 
 > **配信方式**: 本パッケージは npm registry ではなく **GitHub repo から直接** インストールされる。`npx` が初回に GitHub からアーカイブを取得し、以後は npm のローカルキャッシュから起動する。`gamasenninn` 名義の GitHub repo を信頼する前提。
 
+## HTTP transport (リモート利用、v0.12.0+)
+
+cross-machine で MCP client (Claude Code 等) と Tealus 本体が **別マシン** に居る場合、stdio transport は使えない (child process spawn が成立しない)。代わりに **HTTP transport** を使う。
+
+```
+[Claude Code (マシン A)]               [Tealus サーバ (マシン B)]
+  ~/.claude.json                          port 3000 (Tealus 本体)
+  mcpServers:                             ┌──────────────────┐
+    tealus:                               │ /mcp proxy       │
+      url: https://tealus.example.com/mcp │   ↓              │
+      headers:                            │ port 3200        │
+        Authorization: Bearer <JWT> ────► │ tealus-mcp       │
+                                          │ --transport=http │
+                                          └──────────────────┘
+```
+
+**サーバ側起動** (Tealus と同マシンで):
+
+```bash
+TEALUS_USER_ID=bot-id \
+TEALUS_PASSWORD=bot-pass \
+JWT_SECRET=<Tealus 本体と同値> \
+MCP_HTTP_PORT=3200 \
+node src/index.js --transport=http
+```
+
+Tealus 本体側 (port 3000) で `/mcp/*` proxy が必要 (`createProxyMiddleware` で `localhost:3200` に転送、tealus#264 参照)。
+
+**クライアント側設定** (MCP client の url-based config、JWT は Tealus 本体と shared):
+
+```json
+{
+  "mcpServers": {
+    "tealus": {
+      "url": "https://tealus.example.com/mcp",
+      "headers": { "Authorization": "Bearer <JWT>" }
+    }
+  }
+}
+```
+
+**現在の scope**: HTTP request/response のみ。SSE event broker (server → client wake-up) は Phase 2 で別途。stdio transport は **後方互換のため維持**、既存採用者は影響なし。
+
 ## 環境変数
 
 | 変数 | 必須 | 説明 |
@@ -33,6 +76,8 @@ Claude Code / Cursor / その他 MCP 対応 AI クライアントから、Tealus
 | `TEALUS_API_URL` | × | Tealus サーバの URL (default: `http://localhost:3000`) |
 | `TEALUS_USER_ID` | ○ | Tealus 上の bot ユーザ ID (旧 `TEALUS_BOT_ID` も互換) |
 | `TEALUS_PASSWORD` | ○ | bot ユーザのパスワード (旧 `TEALUS_BOT_PASS` も互換) |
+| `JWT_SECRET` | △ | `--transport=http` の場合のみ必須。Tealus 本体 server / agent-server と **完全に同じ値**にする (proxy で pass-through、検証は本 server 側) |
+| `MCP_HTTP_PORT` | × | HTTP transport の listen port (default: `3200`)、`--transport=http` 時のみ effect |
 
 bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作成する。
 
@@ -90,9 +135,15 @@ bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作�
 git clone https://github.com/gamasenninn/tealus-mcp.git
 cd tealus-mcp
 npm install
-npm test                    # 65 件 jest
+npm test                    # 83 件 jest
 npm run fixtures            # __tests__/fixtures/ の sample.pdf/docx/xlsx 再生成 (任意)
+
+# stdio transport (default、既存動作)
 TEALUS_USER_ID=... TEALUS_PASSWORD=... node src/index.js
+
+# HTTP transport (v0.12.0+、cross-machine 用)
+TEALUS_USER_ID=... TEALUS_PASSWORD=... JWT_SECRET=... \
+  node src/index.js --transport=http
 ```
 
 ## バージョン履歴
