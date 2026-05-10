@@ -21,9 +21,11 @@ const SECRET = 'test-jwt-secret-264';
 function buildTestApp(mcpServer) {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
-  app.get('/health', (req, res) => {
+  const healthHandler = (req, res) => {
     res.json({ status: 'ok', transport: 'http', server: 'tealus-mcp' });
-  });
+  };
+  app.get('/health', healthHandler);
+  app.get('/mcp/health', healthHandler);
   const jwtAuth = createJwtAuth(SECRET);
   app.all('/mcp', jwtAuth, async (req, res) => {
     try {
@@ -72,6 +74,15 @@ describe('HTTP transport — /health', () => {
 
   test('GET /health returns 200 (no auth)', async () => {
     const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.objectContaining({
+      status: 'ok',
+      transport: 'http',
+    }));
+  });
+
+  test('GET /mcp/health returns 200 (no auth) — for through-proxy access', async () => {
+    const res = await request(app).get('/mcp/health');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(expect.objectContaining({
       status: 'ok',

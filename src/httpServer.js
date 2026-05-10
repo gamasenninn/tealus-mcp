@@ -27,10 +27,13 @@ async function startHttpServer({ mcpServer, port, jwtSecret, logger }) {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
 
-  // /health は no auth (採用者の reachability check 用、proxy 経由では /mcp/health で見える)
-  app.get('/health', (req, res) => {
+  // /health (root) と /mcp/health (proxy 経由) 両方を expose、no auth (reachability check 用)
+  // standalone 直叩きでは /health、tealus 本体 proxy 経由では /mcp/health で到達可
+  const healthHandler = (req, res) => {
     res.json({ status: 'ok', transport: 'http', server: 'tealus-mcp' });
-  });
+  };
+  app.get('/health', healthHandler);
+  app.get('/mcp/health', healthHandler);
 
   const jwtAuth = createJwtAuth(jwtSecret);
 

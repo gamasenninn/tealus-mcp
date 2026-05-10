@@ -10,6 +10,23 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-05-10
+
+### Added
+
+- **`/mcp/health` endpoint (no auth) — through-proxy reachability check 用** ([tealus#264](https://github.com/gamasenninn/tealus/issues/264) Phase 1 alpha follow-up)
+  - 既存 `/health` (root) は standalone 直叩き用に維持、追加で `/mcp/health` も同 handler で expose
+  - tealus 本体 server (Express の `app.use('/mcp', proxy + pathRewrite re-add)`) 経由では `/mcp/health` で reachability 確認可能
+  - 5/10 手動テストで Test 3-a (proxy 経由 health check) が 404 になっていた問題の構造解決
+
+### Documentation
+
+- README に正確な path 記述 (proxy 経由は `/mcp/health` 必須を明示)
+
+### Note
+
+本 release は tealus 本体側の **proxy 設定 fix と組** で機能 (tealus repo b3fb3f7 → follow-up commit で `pathRewrite: (path) => '/mcp' + path` 追加)。Express の `app.use('/mcp', ...)` が req.url から `/mcp` を strip する仕様を見落とした v0.12.0 の初期 plan の修正。
+
 ## [0.12.1] - 2026-05-10
 
 ### Added
