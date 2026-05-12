@@ -36,6 +36,7 @@ function createMockClient() {
     markTagDone: jest.fn(),
     createRoom: jest.fn(),
     deleteRoom: jest.fn(),
+    transcribeMedia: jest.fn(),
   };
 }
 
@@ -48,9 +49,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('15ツールが登録される', () => {
+  test('16ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(15);
+    expect(Object.keys(tools)).toHaveLength(16);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -66,6 +67,7 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('read_document');
     expect(tools).toHaveProperty('send_text_as_file');
     expect(tools).toHaveProperty('generate_and_send_image');
+    expect(tools).toHaveProperty('transcribe_media');
   });
 
   test('send_text_as_file は pushFile を呼ぶ', async () => {
@@ -536,6 +538,98 @@ describe('Tealus MCP Tools', () => {
       const result = await server.callTool('mark_tag_done', { message_id: 'm1', tag_name: 'X', is_done: true });
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.error).toContain('存在しません');
+    });
+  });
+
+  describe('transcribe_media', () => {
+    test('cached voice transcription を JSON で返す', async () => {
+      client.transcribeMedia.mockResolvedValue({
+        status: 'done',
+        message_type: 'voice',
+        formatted_text: 'こんにちは。',
+        raw_text: 'こんにちは',
+        language: 'ja',
+        cached: true,
+        model: 'gpt-4o-transcribe',
+        version: 1,
+      });
+
+      const result = await server.callTool('transcribe_media', {
+        message_id: 'msg-voice-1',
+      });
+
+      expect(client.transcribeMedia).toHaveBeenCalledWith('msg-voice-1', { force: false });
+      expect(result.content).toHaveLength(1);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.cached).toBe(true);
+      expect(parsed.formatted_text).toBe('こんにちは。');
+      expect(parsed.message_type).toBe('voice');
+    });
+
+    test('video の fresh transcription を返す', async () => {
+      client.transcribeMedia.mockResolvedValue({
+        status: 'done',
+        message_type: 'video',
+        formatted_text: '動画の音声テキストです。',
+        raw_text: '動画の音声テキスト',
+        language: 'ja',
+        cached: false,
+        model: 'gpt-4o-transcribe',
+        version: 1,
+      });
+
+      const result = await server.callTool('transcribe_media', {
+        message_id: 'msg-video-1',
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.cached).toBe(false);
+      expect(parsed.message_type).toBe('video');
+    });
+
+    test('force_retranscribe=true で server に force flag を渡す', async () => {
+      client.transcribeMedia.mockResolvedValue({
+        status: 'done',
+        message_type: 'voice',
+        formatted_text: 'updated',
+        raw_text: 'updated',
+        language: 'ja',
+        cached: false,
+        model: 'gpt-4o-transcribe',
+        version: 2,
+      });
+
+      await server.callTool('transcribe_media', {
+        message_id: 'msg-voice-2',
+        force_retranscribe: true,
+      });
+
+      expect(client.transcribeMedia).toHaveBeenCalledWith('msg-voice-2', { force: true });
+    });
+
+    test('server からの error は text として返す', async () => {
+      client.transcribeMedia.mockResolvedValue({
+        error: 'text 型はサポート対象外。voice / video / audio のみ。',
+        message_type: 'text',
+      });
+
+      const result = await server.callTool('transcribe_media', {
+        message_id: 'msg-text-1',
+      });
+
+      expect(result.content[0].text).toContain('エラー');
+      expect(result.content[0].text).toContain('サポート対象外');
+    });
+
+    test('throw exception (network error 等) は "Transcribe failed" として返す', async () => {
+      client.transcribeMedia.mockRejectedValue(new Error('ECONNREFUSED'));
+
+      const result = await server.callTool('transcribe_media', {
+        message_id: 'msg-fail-1',
+      });
+
+      expect(result.content[0].text).toContain('Transcribe failed');
+      expect(result.content[0].text).toContain('ECONNREFUSED');
     });
   });
 });

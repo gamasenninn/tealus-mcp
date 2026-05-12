@@ -10,6 +10,26 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-12
+
+### Added
+
+- **`transcribe_media` 新 MCP tool — 動画/音声メッセージの文字起こし** ([tealus#271](https://github.com/gamasenninn/tealus/issues/271) follow-up)
+  - tealus 本体 server に新 endpoint `POST /api/bot/messages/:id/transcribe` が追加された (tealus 本体側で実装、本 release は thin MCP wrapper)
+  - 動作: tool は `message_id` + optional `force_retranscribe` を受け、tealus server に POST して transcription text を JSON で返す
+  - **問題解決**: `get_message_media` の 10MB 上限で動画が取得できない問題を構造解。base64 で動画を運ばず、server 側で ffmpeg `-vn` audio 抽出 → Whisper API → AI 整形 → text のみ返却
+  - voice メッセージは既存 transcription を cached 返却、video は初回 call で server-side で transcribe → cached
+  - Whisper API 25MB 上限内に大半の動画が収まる (16kHz mono opus 24kbps ≈ 11MB/hour)
+  - 業務無線辞書 (transcription_guideline.json) は voice / video で共有
+
+### Why
+
+5/12 朝に user が業務メモ ルームに動画投稿 → `/light2` `/deep` で文字起こし依頼 → `get_message_media` の 10MB 上限で fail。Deep agent が 3 戦略案を提示し、案 B (`transcribe_media` 新ツール) で決定。元の Deep 提案は tealus-mcp に ffmpeg + OpenAI を抱え込む想定だったが、tealus-mcp には依存も disk access も無く、tealus 本体 server には完成された STT pipeline (gpt-4o-transcribe + transcription_guideline.json) があったため、**server-side endpoint + thin MCP wrapper** に pivot。
+
+### Tests
+
+- `tools.test.js`: 15 → 16 tools registered assertion 更新、`transcribe_media` の 5 test 追加 (cached voice / fresh video / force_retranscribe / server error / throw exception)
+
 ## [0.12.3] - 2026-05-10
 
 ### Fixed

@@ -115,6 +115,24 @@ class TealusClient {
     return this.request('GET', `/bot/messages/${messageId}/media`);
   }
 
+  /**
+   * 動画/音声メッセージの文字起こしを取得する。
+   *
+   * - 既存 cached (status='done') があれば即返却 (`cached: true`)
+   * - cache 無 or `force_retranscribe=true` の場合、server 側で transcribe + format を同期実行
+   * - video は server 側で ffmpeg -vn で audio 抽出してから Whisper API 経由 (25MB 上限対策)
+   *
+   * @param {string} messageId
+   * @param {object} [options]
+   * @param {boolean} [options.force=false] - 既存 cache を無視して再 transcribe
+   * @returns {Promise<{status, message_type, formatted_text, raw_text, language, cached, model, version}>}
+   */
+  async transcribeMedia(messageId, options = {}) {
+    return this.request('POST', `/bot/messages/${messageId}/transcribe`, {
+      force_retranscribe: options.force === true,
+    });
+  }
+
   async searchMessages(params) {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params || {})) {

@@ -348,6 +348,27 @@ function registerTools(server, client) {
       };
     }
   );
+
+  // 16. transcribe_media (#271 follow-up、v0.13.0)
+  server.tool(
+    'transcribe_media',
+    '動画/音声メッセージの文字起こしを取得する。voice は既存 cached transcription を返す。video は初回 call で server-side で transcribe (ffmpeg audio 抽出 → Whisper → AI 整形)、結果は DB cache、2 回目以降は cached を返す。get_message_media の 10MB 上限を回避する構造 (server-side で text のみ返すため動画 size 制限なし)。',
+    {
+      message_id: z.string().describe('対象メッセージのID (video / voice / audio)'),
+      force_retranscribe: z.boolean().optional().describe('既存 cache を無視して再 transcribe する (default: false)'),
+    },
+    async ({ message_id, force_retranscribe }) => {
+      try {
+        const result = await client.transcribeMedia(message_id, { force: force_retranscribe === true });
+        if (result.error) {
+          return { content: [{ type: 'text', text: `エラー: ${result.error}` }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Transcribe failed: ${err.message}` }] };
+      }
+    }
+  );
 }
 
 module.exports = { registerTools };
