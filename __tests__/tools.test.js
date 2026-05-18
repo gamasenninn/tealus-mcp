@@ -283,6 +283,68 @@ describe('Tealus MCP Tools', () => {
       expect(result.content[0].text).not.toContain('big-data'); // base64 は埋め込まない
     });
 
+    test('text/markdown 小型 file (< 100KB) は inline で text 内容を返す (#281 Std fix)', async () => {
+      const content = '# 朝礼議事録\n\n売上目標 7,500万';
+      const buffer = Buffer.from(content, 'utf8');
+      client.getMessageMedia.mockResolvedValue({
+        type: 'file',
+        mime_type: 'text/markdown',
+        file_name: 'minutes.md',
+        file_size: buffer.length,
+        data_base64: buffer.toString('base64'),
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-md-1' });
+      expect(result.content[0].type).toBe('text');
+      expect(result.content[0].text).toContain('minutes.md');
+      expect(result.content[0].text).toContain('朝礼議事録');
+      expect(result.content[0].text).toContain('売上目標 7,500万');
+    });
+
+    test('text/plain 小型 file も inline で text 内容を返す (#281 Std fix)', async () => {
+      const content = 'just plain text\nline 2';
+      const buffer = Buffer.from(content, 'utf8');
+      client.getMessageMedia.mockResolvedValue({
+        type: 'file',
+        mime_type: 'text/plain',
+        file_name: 'log.txt',
+        file_size: buffer.length,
+        data_base64: buffer.toString('base64'),
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-txt-1' });
+      expect(result.content[0].text).toContain('just plain text');
+    });
+
+    test('text/* 巨大 file (> 100KB) は metadata のみ + honest size 理由を返す (#281 Std fix)', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'file',
+        mime_type: 'text/markdown',
+        file_name: 'huge.md',
+        file_size: 200 * 1024, // 200KB
+        data_base64: 'a'.repeat(100), // dummy
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-md-big' });
+      expect(result.content[0].text).toContain('huge.md');
+      expect(result.content[0].text).toContain('204800'); // file_size bytes
+      // honest reason: size 上限超過 を明示
+      expect(result.content[0].text).toMatch(/100\s*KB|102400|上限.*超/);
+      // 「大きすぎる」literal は使わない (誤解を生んでいた旧 message)
+      expect(result.content[0].text).not.toContain('大きすぎる');
+    });
+
+    test('非 text mime の metadata 返却 message は honest な理由を示す (#281 Std fix)', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'video',
+        mime_type: 'video/mp4',
+        file_name: 'clip.mp4',
+        file_size: 8388608,
+        data_base64: 'big-data',
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-vid-2' });
+      expect(result.content[0].text).not.toContain('大きすぎる');
+      // read_document へ案内する hint があると良い (将来 trace で発見可能)
+      expect(result.content[0].text).toMatch(/read_document|transcribe_media/);
+    });
+
     test('error 応答を text で返す', async () => {
       client.getMessageMedia.mockResolvedValue({ error: 'メッセージが見つかりません' });
       const result = await server.callTool('get_message_media', { message_id: 'unknown' });

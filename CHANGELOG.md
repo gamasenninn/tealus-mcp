@@ -10,6 +10,19 @@
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-05-18
+
+### Changed
+
+- **`get_message_media` の size guard 改善 — text/* 小型 file (≤ 100KB) を inline 返却 + 大型 file 拒否理由を honest 化** ([tealus#281](https://github.com/gamasenninn/tealus/issues/281) Std fix)
+  - 旧挙動 (v0.13.1): 画像/音声以外の全 file を「データは base64 で取得可能ですが、MCP text 応答には大きすぎる」literal で metadata only に倒していた (実 file_size 未確認、2 KB の md でも同じ message)
+  - 新挙動 (v0.13.2):
+    - **text/* mime + file_size ≤ 100KB**: data_base64 を utf8 decode して inline で本文を返却 (`{file_name} ({mime}, {size} bytes)\n\n=== 内容 ===\n{text}`)
+    - **text/* mime + file_size > 100KB**: 「text/* mime ですが 100 KB 上限を超過、inline 化スキップ」と honest reason を返す
+    - **非 text mime (video/audio/binary)**: 「非 text mime のため inline 化対象外」と honest reason + read_document / transcribe_media への案内
+  - v0.13.1 の Min fix (`read_document` の text/* 対応) と combined で、Light agent が自作 markdown attachment を **`get_message_media` 一発で直接読める + `read_document` 経由でも読める** 二重 path 確立
+  - tests: `tools.test.js` に +4 test (text/markdown 小型 / text/plain 小型 / text/* 巨大 file 拒否 / 非 text mime honest message)、5 suite 99/99 pass、regression なし
+
 ## [0.13.1] - 2026-05-18
 
 ### Fixed

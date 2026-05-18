@@ -223,13 +223,32 @@ function registerTools(server, client) {
         return { content: [{ type: 'text', text: lines.join('\n') }] };
       }
 
-      // 動画・その他: メタ情報のみ (バイナリは大きすぎることが多いため text 化しない)
+      // text/* mime で size が小さければ data_base64 を decode して inline 返却 (#281 Std fix)
+      // Light agent が自作 markdown attachment 等を read_document を経由せず直接読めるようにする
+      const MAX_INLINE_TEXT_BYTES = 100 * 1024; // 100KB
+      if (result.mime_type?.startsWith('text/') && result.file_size <= MAX_INLINE_TEXT_BYTES && result.data_base64) {
+        const text = Buffer.from(result.data_base64, 'base64').toString('utf8');
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `${result.file_name} (${result.mime_type}, ${result.file_size} bytes)\n\n=== 内容 ===\n${text}`,
+            },
+          ],
+        };
+      }
+
+      // 動画 / 大型 text / 非 text mime: metadata のみ + honest 理由 + 代替 tool 案内
+      const overTextLimit = result.mime_type?.startsWith('text/') && result.file_size > MAX_INLINE_TEXT_BYTES;
+      const sizeReason = overTextLimit
+        ? `text/* mime ですが ${MAX_INLINE_TEXT_BYTES} bytes (100 KB) 上限を超過、inline 化スキップ`
+        : `非 text mime のため inline 化対象外`;
       return {
         content: [
           {
             type: 'text',
             text: `メディア: ${result.file_name} (type=${result.type}, ${result.mime_type}, ${result.file_size} bytes)\n` +
-                  `データは base64 で取得可能ですが、MCP text 応答には大きすぎるためメタ情報のみ返しています。`,
+                  `${sizeReason}。text 化が必要なら read_document (PDF / DOCX / XLSX / text/*) or transcribe_media (動画 / 音声) を試す。`,
           },
         ],
       };
