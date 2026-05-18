@@ -10,6 +10,25 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-05-18
+
+### Fixed
+
+- **`read_document` が `text/markdown` / `text/plain` / `text/csv` 等の text/* mime を扱えない問題を fix** ([tealus#281](https://github.com/gamasenninn/tealus/issues/281))
+  - 症状: Light agent (`/light`) が自作 markdown attachment を user 依頼で読み戻せず「この環境では本文の直接展開に失敗しました」と返す self-inflicted blind spot
+  - 5/18 朝の朝礼ルームで再現: 動画 → 議事録 .md attach → user「内容表示」→ agent 読めず → user が手作業で再貼り付け
+  - 真因: `documentReader.js` の `detectFormat` が PDF/DOCX/XLSX のみ判定、text/* は `unsupported` に倒れていた
+  - 対応: `detectFormat` に `text` branch 追加 (ext `md`/`txt`/`csv` または mime `text/*`)、`extractText` の switch に `case 'text'` 追加 (`buffer.toString('utf8')` で本文返却、既存 `MAX_TEXT_LENGTH` で truncation)
+
+### Tests
+
+- `documentReader.test.js`: +4 test (detectFormat text 判定 / markdown 本文 / plain text / 巨大 text 切り詰め)、5 suite 95/95 pass、regression なし
+
+### Known limitations (Std/Full fix は別 PR で予定)
+
+- `get_message_media` は依然として画像/音声以外を一律「大きすぎる」と倒す (実 file_size 未確認)。100KB 以下の text/* を data_base64 decode して直接返す改善は別 PR
+- filename mojibake (`朝礼議事録` → `æç¤¼è­°äºé²`) は上流 `tealusClient.getMessageMedia` の response decode 問題、別 follow-up
+
 ## [0.13.0] - 2026-05-12
 
 ### Added
