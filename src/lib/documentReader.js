@@ -27,6 +27,7 @@ function detectFormat(media) {
   if (ext === 'pdf' || mime === 'application/pdf') return 'pdf';
   if (ext === 'docx' || mime.includes('officedocument.wordprocessingml')) return 'docx';
   if (ext === 'xlsx' || mime.includes('officedocument.spreadsheetml')) return 'xlsx';
+  if (ext === 'md' || ext === 'txt' || ext === 'csv' || mime.startsWith('text/')) return 'text';
   return 'unsupported';
 }
 
@@ -172,6 +173,10 @@ async function extractText(media) {
     case 'pdf':  return await extractPdf(buffer);
     case 'docx': return await extractDocx(buffer);
     case 'xlsx': return await extractXlsx(buffer);
+    case 'text': {
+      const { text, truncated } = truncateText(buffer.toString('utf8'));
+      return { format: 'text', text, truncated };
+    }
     default:
       return {
         format: 'unsupported',

@@ -49,6 +49,19 @@ describe('detectFormat', () => {
     expect(detectFormat({ mime_type: 'image/png', file_name: 'icon.png' })).toBe('unsupported');
     expect(detectFormat({ mime_type: '', file_name: '' })).toBe('unsupported');
   });
+
+  test('text: markdown / plain / csv を text 扱い (#281)', () => {
+    // mime ベース判定
+    expect(detectFormat({ mime_type: 'text/markdown', file_name: 'notes.md' })).toBe('text');
+    expect(detectFormat({ mime_type: 'text/plain', file_name: 'log.txt' })).toBe('text');
+    expect(detectFormat({ mime_type: 'text/csv', file_name: 'data.csv' })).toBe('text');
+    // ext ベース判定 (mime 無し)
+    expect(detectFormat({ mime_type: '', file_name: 'minutes.md' })).toBe('text');
+    expect(detectFormat({ mime_type: '', file_name: 'note.TXT' })).toBe('text');
+    expect(detectFormat({ mime_type: '', file_name: 'export.csv' })).toBe('text');
+    // text/* 一般 (text/html 等の予備)
+    expect(detectFormat({ mime_type: 'text/html', file_name: 'page.html' })).toBe('text');
+  });
 });
 
 describe('extractText - PDF', () => {
@@ -96,6 +109,56 @@ describe('extractText - XLSX', () => {
     expect(result.text).toContain('=== sheet: Members ===');
     expect(result.text).toContain('=== sheet: Inventory ===');
     expect(result.truncated).toBe(false);
+  });
+});
+
+describe('extractText - text (#281)', () => {
+  test('markdown 本文を UTF-8 として返す', async () => {
+    const content = '# 朝礼議事録 2026-05-18\n\n- 売上目標: 7,500万\n- 買取目標: 4,000万\n';
+    const buffer = Buffer.from(content, 'utf8');
+    const media = {
+      type: 'file',
+      data_base64: buffer.toString('base64'),
+      mime_type: 'text/markdown',
+      file_name: '朝礼議事録_2026-05-18.md',
+      file_size: buffer.length,
+    };
+    const result = await extractText(media);
+    expect(result.format).toBe('text');
+    expect(result.text).toBe(content);
+    expect(result.truncated).toBe(false);
+    expect(result.warning).toBeUndefined();
+  });
+
+  test('plain text (.txt) も同じ branch で text 化', async () => {
+    const content = 'just plain text\nline 2\n';
+    const buffer = Buffer.from(content, 'utf8');
+    const media = {
+      type: 'file',
+      data_base64: buffer.toString('base64'),
+      mime_type: 'text/plain',
+      file_name: 'log.txt',
+      file_size: buffer.length,
+    };
+    const result = await extractText(media);
+    expect(result.format).toBe('text');
+    expect(result.text).toBe(content);
+  });
+
+  test('巨大 text は MAX_TEXT_LENGTH で truncated', async () => {
+    const big = 'a'.repeat(1_100_000); // 1.1M chars
+    const buffer = Buffer.from(big, 'utf8');
+    const media = {
+      type: 'file',
+      data_base64: buffer.toString('base64'),
+      mime_type: 'text/plain',
+      file_name: 'huge.txt',
+      file_size: buffer.length,
+    };
+    const result = await extractText(media);
+    expect(result.format).toBe('text');
+    expect(result.truncated).toBe(true);
+    expect(result.text.length).toBe(1_000_000);
   });
 });
 
