@@ -10,6 +10,23 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-24
+
+### Added
+
+- **`get_message_edit_history` MCP tool 新規追加** (= 5/24 Day 8 user 提案、organon daily cycle で edit history 観察用)
+  - 入力: `message_id`
+  - 出力: text edit history (= `message_edits` table) + voice/video transcription versions (= `voice_transcriptions` table) の統合
+  - 動機: organon class が raw STT vs user-corrected pair を直接観察できるようにし、別運用していた mining script (= `server/scripts/mine_transcription_aliases.js`、Issue [tealus#206](https://github.com/gamasenninn/tealus/issues/206) + [tealus#208](https://github.com/gamasenninn/tealus/issues/208) で構築済 CLOSED) の自動化代替を可能にする
+  - 設計原則: organic ontology paradigm の simplicity (= 1 instrument 主義)、別 cron / 月次 run を廃止して organon の natural daily cycle に統合
+  - 認可: 既存 bot endpoint と同 pattern (= Bot がそのルームの member であること)
+  - 関連 server 修正: `GET /api/bot/messages/:id/edit-history` endpoint 追加 (= `server/src/routes/bot.js`)
+  - tools.js: ツール数 16 → 17
+
+### Changed
+
+- description (= package.json) に `get_message_edit_history` を追加。
+
 ## [0.13.2] - 2026-05-18
 
 ### Changed

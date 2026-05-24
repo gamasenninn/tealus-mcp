@@ -388,6 +388,26 @@ function registerTools(server, client) {
       }
     }
   );
+
+  // 17. get_message_edit_history (= 5/24 user 提案、Day 8、organon daily cycle で edit history 観察用)
+  server.tool(
+    'get_message_edit_history',
+    'メッセージの編集履歴 (text edits + voice/video transcription versions) を統合返却する。voice/video の場合は raw_text (Whisper output) vs formatted_text (AI整形) vs user-corrected の version history を取得可能、text の場合は message_edits table の version history を返す。organon class の daily cycle で raw STT vs user-corrected pair を直接観察するための tool (= 別途 mining script を運用する必要を解消、organic ontology paradigm の simplicity 1 instrument 主義)。',
+    {
+      message_id: z.string().describe('対象メッセージのID'),
+    },
+    async ({ message_id }) => {
+      try {
+        const result = await client.getMessageEditHistory(message_id);
+        if (result.error) {
+          return { content: [{ type: 'text', text: `エラー: ${result.error}` }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Edit history fetch failed: ${err.message}` }] };
+      }
+    }
+  );
 }
 
 module.exports = { registerTools };

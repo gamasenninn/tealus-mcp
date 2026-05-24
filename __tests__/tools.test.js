@@ -37,6 +37,7 @@ function createMockClient() {
     createRoom: jest.fn(),
     deleteRoom: jest.fn(),
     transcribeMedia: jest.fn(),
+    getMessageEditHistory: jest.fn(),
   };
 }
 
@@ -49,9 +50,9 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('16ツールが登録される', () => {
+  test('17ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(16);
+    expect(Object.keys(tools)).toHaveLength(17);
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
@@ -68,6 +69,63 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('send_text_as_file');
     expect(tools).toHaveProperty('generate_and_send_image');
     expect(tools).toHaveProperty('transcribe_media');
+    expect(tools).toHaveProperty('get_message_edit_history');
+  });
+
+  describe('get_message_edit_history', () => {
+    test('text 編集履歴を返す', async () => {
+      client.getMessageEditHistory.mockResolvedValue({
+        message_id: 'msg-text-1',
+        type: 'text',
+        is_edited: true,
+        current_content: 'edited text',
+        text_edit_history: [
+          { version: 1, content: 'original text', edited_by: 'user-1', created_at: '2026-05-24T01:00:00Z' },
+        ],
+        voice_transcription_versions: [],
+      });
+      const result = await server.callTool('get_message_edit_history', { message_id: 'msg-text-1' });
+      expect(client.getMessageEditHistory).toHaveBeenCalledWith('msg-text-1');
+      const text = result.content[0].text;
+      expect(text).toContain('"type": "text"');
+      expect(text).toContain('"is_edited": true');
+      expect(text).toContain('original text');
+      expect(text).toContain('edited text');
+    });
+
+    test('voice transcription version history を返す', async () => {
+      client.getMessageEditHistory.mockResolvedValue({
+        message_id: 'msg-v-1',
+        type: 'voice',
+        is_edited: false,
+        current_content: '',
+        text_edit_history: [],
+        voice_transcription_versions: [
+          { version: 1, raw_text: 'raw STT', formatted_text: 'AI formatted', status: 'done', edited_by: null, created_at: '2026-05-24T01:00:00Z' },
+          { version: 2, raw_text: 'raw STT', formatted_text: 'user corrected', status: 'done', edited_by: 'user-1', created_at: '2026-05-24T01:05:00Z' },
+        ],
+      });
+      const result = await server.callTool('get_message_edit_history', { message_id: 'msg-v-1' });
+      const text = result.content[0].text;
+      expect(text).toContain('"type": "voice"');
+      expect(text).toContain('raw STT');
+      expect(text).toContain('AI formatted');
+      expect(text).toContain('user corrected');
+    });
+
+    test('error 応答を渡す', async () => {
+      client.getMessageEditHistory.mockResolvedValue({ error: 'メッセージが見つかりません' });
+      const result = await server.callTool('get_message_edit_history', { message_id: 'msg-x' });
+      expect(result.content[0].text).toContain('エラー');
+      expect(result.content[0].text).toContain('メッセージが見つかりません');
+    });
+
+    test('throw を捕捉して error メッセージを返す', async () => {
+      client.getMessageEditHistory.mockRejectedValue(new Error('network down'));
+      const result = await server.callTool('get_message_edit_history', { message_id: 'msg-x' });
+      expect(result.content[0].text).toContain('Edit history fetch failed');
+      expect(result.content[0].text).toContain('network down');
+    });
   });
 
   test('send_text_as_file は pushFile を呼ぶ', async () => {

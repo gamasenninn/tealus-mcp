@@ -116,6 +116,25 @@ class TealusClient {
   }
 
   /**
+   * メッセージの編集履歴 (text edits + voice/video transcription versions) を統合返却。
+   *
+   * 動機: organon daily cycle で raw STT vs user-corrected pair を直接観察できるように
+   * (= 5/24 user 提案、別 mining script (= server/scripts/mine_transcription_aliases.js)
+   * の自動化代替、organic ontology paradigm の simplicity 1 instrument 主義)。
+   *
+   * @param {string} messageId
+   * @returns {Promise<{
+   *   message_id, type, room_id, sender_id, is_edited, created_at,
+   *   current_content,
+   *   text_edit_history: Array<{version, content, edited_by, created_at}>,
+   *   voice_transcription_versions: Array<{version, raw_text, formatted_text, status, edited_by, created_at}>
+   * }>}
+   */
+  async getMessageEditHistory(messageId) {
+    return this.request('GET', `/bot/messages/${messageId}/edit-history`);
+  }
+
+  /**
    * 動画/音声メッセージの文字起こしを取得する。
    *
    * - 既存 cached (status='done') があれば即返却 (`cached: true`)
