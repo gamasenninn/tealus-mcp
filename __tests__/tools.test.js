@@ -298,6 +298,21 @@ describe('Tealus MCP Tools', () => {
       expect(result.content[1].text).toContain('photo.png');
     });
 
+    test('type=file でも mime_type が image/* なら image content として返す (#292 Tealus LINE file 経由画像 6/7 Day 22)', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'file',
+        mime_type: 'image/jpeg',
+        file_name: 'PXL_20260527_044206345.jpg',
+        file_size: 3340337,
+        data_base64: 'aGVsbG8=',
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-line-file-jpg' });
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-line-file-jpg');
+      expect(result.content[0]).toEqual({ type: 'image', data: 'aGVsbG8=', mimeType: 'image/jpeg' });
+      expect(result.content[1].type).toBe('text');
+      expect(result.content[1].text).toContain('PXL_20260527_044206345.jpg');
+    });
+
     test('voice は文字起こしを優先して text で返す', async () => {
       client.getMessageMedia.mockResolvedValue({
         type: 'voice',

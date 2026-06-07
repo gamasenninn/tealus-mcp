@@ -195,7 +195,9 @@ function registerTools(server, client) {
       }
 
       // 画像は MCP image content で返し AI が直接視認できるようにする
-      if (result.type === 'image' && result.data_base64 && result.mime_type?.startsWith('image/')) {
+      // mime_type ベースで判定 (= type='file' で添付された image も救う、Tealus #292 6/7 Day 22)
+      // 旧: result.type === 'image' AND check → LINE で「ファイル」添付された image (= type='file') が fall through
+      if (result.mime_type?.startsWith('image/') && result.data_base64) {
         return {
           content: [
             {

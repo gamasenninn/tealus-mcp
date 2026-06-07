@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-06-07
+
+### Fixed
+
+- **`get_message_media` の image 判定を mime_type ベースに緩和** ([tealus#292](https://github.com/gamasenninn/tealus/issues/292) 6/7 Day 22 dogfood)
+  - 旧挙動 (v0.14.0): `result.type === 'image' && result.mime_type?.startsWith('image/')` AND check で、LINE Bridge が「ファイル添付」 経路で受け取った image (= `type='file'` + `mime_type='image/jpeg'`) が fall through し metadata only に倒れていた。AI agent が「画像本体にアクセスできず」と判断する原因
+  - 新挙動 (v0.14.1): `result.mime_type?.startsWith('image/') && result.data_base64` ベースに緩和。`type='file'` でも mime が image/* なら MCP image content として返却し、AI vision 解析が可能になる
+  - tests: `tools.test.js` に +1 test (type='file' + mime_type='image/jpeg' で image content として返る検証)、61/61 pass、regression なし
+  - 動機: Tealus #292 image/video/file 転送機能 (リンク方式) 実装後 dogfood で「LINE 経由画像を AI 解析」 業務 use case の盲点として surface
+
 ## [0.14.0] - 2026-05-24
 
 ### Added
