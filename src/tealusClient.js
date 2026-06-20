@@ -13,8 +13,9 @@ class TealusClient {
     this.token = null;
   }
 
-  async login() {
-    if (this.token) return;
+  async login(force = false) {
+    if (this.token && !force) return;
+    this.token = null;
 
     const res = await fetch(`${this.apiUrl}/api/auth/login`, {
       method: 'POST',
@@ -32,7 +33,26 @@ class TealusClient {
     this.token = data.token;
   }
 
-  async request(method, path, body = null) {
+  /**
+   * 非2xx を握り潰さず status/body 付き Error を throw (#303 同型)。
+   */
+  async _throwIfNotOk(res, method, path) {
+    if (res.ok) return;
+    const text = await res.text().catch(() => '');
+    let detail = '';
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && parsed.error) detail = `: ${parsed.error}`;
+    } catch { /* 非 JSON body はそのまま無視 */ }
+    const err = new Error(
+      `Tealus API ${method} ${path} failed: ${res.status} ${res.statusText}${detail}`
+    );
+    err.status = res.status;
+    err.body = text;
+    throw err;
+  }
+
+  async _send(method, path, body) {
     await this.login();
     const options = {
       method,
@@ -42,8 +62,57 @@ class TealusClient {
       },
     };
     if (body) options.body = JSON.stringify(body);
+    return fetch(`${this.apiUrl}/api${path}`, options);
+  }
 
-    const res = await fetch(`${this.apiUrl}/api${path}`, options);
+  /**
+   * 認証付きリクエスト (#303)
+   *
+   * 旧実装は res.ok を見ず res.json() を返していたため、/bot/push 等の失敗 (= 401 token
+   * 失効含む) を握り潰し、agent が「送信成功」と扱うのに実際は届かない silent fail を招いた。
+   * - 2xx: 従来どおり JSON を返す
+   * - 401: bot JWT 失効とみなし token を破棄して 1 回だけ再ログイン retry (直線・再入なし)
+   * - 非2xx (401 retry 後含む): status/body 付き Error を throw
+   */
+  async request(method, path, body = null) {
+    let res = await this._send(method, path, body);
+
+    if (res.status === 401) {
+      this.token = null;
+      await this.login(true);
+      res = await this._send(method, path, body);
+    }
+
+    await this._throwIfNotOk(res, method, path);
+    return res.json();
+  }
+
+  /**
+   * multipart (image/file) 送信の共通処理。request() と同じ 401 再ログイン retry + ok 検査。
+   * form は consume されるため、再送時に buildForm() で作り直す。
+   */
+  async _sendForm(path, buildForm) {
+    await this.login();
+    const doSend = async () => {
+      const form = buildForm();
+      return fetch(`${this.apiUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          ...form.getHeaders(),
+        },
+        body: form,
+      });
+    };
+
+    let res = await doSend();
+    if (res.status === 401) {
+      this.token = null;
+      await this.login(true);
+      res = await doSend();
+    }
+
+    await this._throwIfNotOk(res, 'POST', path);
     return res.json();
   }
 
@@ -52,39 +121,23 @@ class TealusClient {
   }
 
   async pushImage(roomId, buffer, filename, caption = '') {
-    await this.login();
-    const form = new FormData();
-    form.append('room_id', roomId);
-    form.append('image', buffer, { filename, contentType: 'image/png' });
-    if (caption) form.append('content', caption);
-
-    const res = await fetch(`${this.apiUrl}/api/bot/push-image`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        ...form.getHeaders(),
-      },
-      body: form,
+    return this._sendForm('/api/bot/push-image', () => {
+      const form = new FormData();
+      form.append('room_id', roomId);
+      form.append('image', buffer, { filename, contentType: 'image/png' });
+      if (caption) form.append('content', caption);
+      return form;
     });
-    return res.json();
   }
 
   async pushFile(roomId, buffer, filename, mimeType, content = '') {
-    await this.login();
-    const form = new FormData();
-    form.append('room_id', roomId);
-    form.append('file', buffer, { filename, contentType: mimeType });
-    if (content) form.append('content', content);
-
-    const res = await fetch(`${this.apiUrl}/api/bot/push-file`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        ...form.getHeaders(),
-      },
-      body: form,
+    return this._sendForm('/api/bot/push-file', () => {
+      const form = new FormData();
+      form.append('room_id', roomId);
+      form.append('file', buffer, { filename, contentType: mimeType });
+      if (content) form.append('content', content);
+      return form;
     });
-    return res.json();
   }
 
   async getMessages(roomId, limit = 20, options = {}) {

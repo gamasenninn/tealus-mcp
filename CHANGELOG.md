@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-06-20
+
+### Fixed
+
+- **HTTP client (`tealusClient`) の silent fail を排除** ([tealus#303](https://github.com/gamasenninn/tealus/issues/303) 同型、6/18 サポート班指摘の MCP 自律 send_message 経路)
+  - 旧挙動: `request()` が `res.ok` を見ず `res.json()` を返していたため、`/bot/push` 等の非2xx (= 401 token 失効含む) を握り潰し、agent が「送信成功」と扱うのに実際は届かない silent fail を招いていた。`login()` も token を一度 cache すると 401 でも再ログインせず、bot JWT 失効で全 push が静かに失敗
+  - 新挙動: `request()` は (1) 2xx は従来どおり JSON 返却、(2) 401 で token 破棄 + 1 回だけ再ログイン retry (直線・再入なし)、(3) 非2xx は status/body 付き Error を throw。`pushImage`/`pushFile` の multipart 経路も `_sendForm()` 共通化で同型 hardening (form は再送時 rebuild)
+  - 動機: agent-server `botApi.request()` は #303 で修正済だったが、tealus-mcp 側の同型 HTTP client は未対応だった (= 藤井さん環境 6/18 dogfood で観測された agent 自律投函経路の silent fail)
+  - tests: `__tests__/tealusClient.test.js` 新規 6 件 (2xx / 非2xx throw / 401 retry 成功 / 401 継続 throw / pushFile 同型 2 件)、TDD Red→Green、110/110 pass
+
 ## [0.14.1] - 2026-06-07
 
 ### Fixed
