@@ -174,19 +174,23 @@ describe('Tealus MCP Tools', () => {
   });
 
   describe('generate_and_send_image — #313 (response_format 廃止対応)', () => {
-    let origKey, origFetch;
+    let origKey, origFetch, origModel;
     beforeEach(() => {
       origKey = process.env.OPENAI_API_KEY;
+      origModel = process.env.OPENAI_IMAGE_MODEL;
       origFetch = global.fetch;
       process.env.OPENAI_API_KEY = 'sk-test';
+      delete process.env.OPENAI_IMAGE_MODEL;
     });
     afterEach(() => {
       if (origKey === undefined) delete process.env.OPENAI_API_KEY;
       else process.env.OPENAI_API_KEY = origKey;
+      if (origModel === undefined) delete process.env.OPENAI_IMAGE_MODEL;
+      else process.env.OPENAI_IMAGE_MODEL = origModel;
       global.fetch = origFetch;
     });
 
-    test('response_format を body に含めない', async () => {
+    test('response_format を body に含めず、model は gpt-image-1 default', async () => {
       const calls = [];
       global.fetch = jest.fn(async (url, opts) => {
         calls.push({ url, opts });
@@ -195,7 +199,18 @@ describe('Tealus MCP Tools', () => {
       await server.callTool('generate_and_send_image', { room_id: 'r', prompt: 'a cat' });
       const body = JSON.parse(calls[0].opts.body);
       expect(body).not.toHaveProperty('response_format');
-      expect(body.model).toBeDefined();
+      expect(body.model).toBe('gpt-image-1');
+    });
+
+    test('OPENAI_IMAGE_MODEL env で model を上書きできる', async () => {
+      process.env.OPENAI_IMAGE_MODEL = 'dall-e-3';
+      const calls = [];
+      global.fetch = jest.fn(async (url, opts) => {
+        calls.push({ url, opts });
+        return { ok: true, json: async () => ({ data: [{ b64_json: Buffer.from('PNG').toString('base64') }] }) };
+      });
+      await server.callTool('generate_and_send_image', { room_id: 'r', prompt: 'a cat' });
+      expect(JSON.parse(calls[0].opts.body).model).toBe('dall-e-3');
     });
 
     test('b64_json 応答を処理して pushImage する', async () => {

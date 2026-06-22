@@ -285,11 +285,11 @@ function registerTools(server, client) {
   // OPENAI_API_KEY を env で必要 (Light v2 が subscription mode でも image gen は API 経由)。
   server.tool(
     'generate_and_send_image',
-    'DALL-E 3 で画像を生成して Tealus のルームに送信する。prompt は英語が DALL-E 的に精度高い (日本語 OK だが意訳される)。OPENAI_API_KEY env が必要。',
+    '画像を生成して Tealus のルームに送信する。prompt は英語が精度高い (日本語 OK だが意訳される)。OPENAI_API_KEY env が必要。モデルは env OPENAI_IMAGE_MODEL で変更可 (default gpt-image-1)。',
     {
       room_id: z.string().describe('送信先ルームID'),
       prompt: z.string().describe('画像生成 prompt (英語推奨、日本語可)'),
-      size: z.enum(['1024x1024', '1792x1024', '1024x1792']).optional().describe('画像サイズ (default: 1024x1024)'),
+      size: z.enum(['1024x1024', '1536x1024', '1024x1536', 'auto']).optional().describe('画像サイズ (default: 1024x1024)'),
       caption: z.string().optional().describe('画像に添える caption text (任意)'),
     },
     async ({ room_id, prompt, size, caption }) => {
@@ -304,10 +304,11 @@ function registerTools(server, client) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
           },
-          // #313: response_format は現行 Images API で廃止 (Unknown parameter エラー)。
-          // 送らず、応答の b64_json / url いずれの形でも処理する (model 差の両対応)。
+          // #313/#314: response_format は現行 Images API で廃止 (Unknown parameter エラー)。
+          // model は env で変更可、default gpt-image-1 (= dall-e-3 は account によって
+          // "does not exist" になるため現行モデルへ移行)。応答は b64_json / url 両対応。
           body: JSON.stringify({
-            model: 'dall-e-3',
+            model: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1',
             prompt,
             size: size || '1024x1024',
             n: 1,

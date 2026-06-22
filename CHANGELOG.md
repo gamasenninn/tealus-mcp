@@ -10,6 +10,15 @@
 
 ## [Unreleased]
 
+## [0.14.4] - 2026-06-22
+
+### Fixed
+
+- **画像生成モデルを `dall-e-3` → `gpt-image-1` に変更（env 上書き可）** ([tealus#313](https://github.com/gamasenninn/tealus/issues/313) follow-up、6/22 dogfood で発覚)
+  - v0.14.3（response_format 除去）の後、`The model 'dall-e-3' does not exist.` で失敗。当該アカウントの利用可能画像モデルを確認したところ **dall-e-3 は廃止済**で `gpt-image-1` / `gpt-image-1.5` / `gpt-image-2` 等が利用可能だった。
+  - 修正: default model を `gpt-image-1` に変更し、env **`OPENAI_IMAGE_MODEL`** で上書き可能に（escape hatch）。size enum も gpt-image-1 系（`1024x1024` / `1536x1024` / `1024x1536` / `auto`）に更新。応答は v0.14.3 の b64_json/url 両対応のまま。
+  - tests: `tools.test.js` に model default / env 上書きの検証を追加、全 115 green。
+
 ## [0.14.3] - 2026-06-22
 
 ### Fixed
