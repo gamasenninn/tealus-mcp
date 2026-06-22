@@ -164,8 +164,12 @@ class TealusClient {
     return this.request('POST', '/bot/mark-read', { message_ids: messageIds });
   }
 
-  async getMessageMedia(messageId) {
-    return this.request('GET', `/bot/messages/${messageId}/media`);
+  async getMessageMedia(messageId, index) {
+    // #316: 複数添付メッセージは index で N 枚目を取得 (省略時は 0 枚目、後方互換)
+    const qs = new URLSearchParams();
+    if (index !== undefined && index !== null) qs.set('index', String(index));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.request('GET', `/bot/messages/${messageId}/media${suffix}`);
   }
 
   /**

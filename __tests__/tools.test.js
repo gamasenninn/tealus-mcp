@@ -365,7 +365,7 @@ describe('Tealus MCP Tools', () => {
         data_base64: 'aGVsbG8=',
       });
       const result = await server.callTool('get_message_media', { message_id: 'msg-img-1' });
-      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-img-1');
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-img-1', undefined);
       expect(result.content[0]).toEqual({ type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' });
       expect(result.content[1].type).toBe('text');
       expect(result.content[1].text).toContain('photo.png');
@@ -380,7 +380,7 @@ describe('Tealus MCP Tools', () => {
         data_base64: 'aGVsbG8=',
       });
       const result = await server.callTool('get_message_media', { message_id: 'msg-line-file-jpg' });
-      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-line-file-jpg');
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-line-file-jpg', undefined);
       expect(result.content[0]).toEqual({ type: 'image', data: 'aGVsbG8=', mimeType: 'image/jpeg' });
       expect(result.content[1].type).toBe('text');
       expect(result.content[1].text).toContain('PXL_20260527_044206345.jpg');
@@ -496,6 +496,38 @@ describe('Tealus MCP Tools', () => {
       const result = await server.callTool('get_message_media', { message_id: 'unknown' });
       expect(result.content[0].text).toContain('エラー');
       expect(result.content[0].text).toContain('メッセージが見つかりません');
+    });
+
+    // #316: 複数画像メッセージの index 取得 + 案内
+    test('複数画像メッセージは media_count を含む案内を text に付ける', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'image', mime_type: 'image/jpeg', file_name: 'shared-0.jpeg',
+        file_size: 2000000, data_base64: 'aGVsbG8=', media_count: 4, index: 0,
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-multi' });
+      expect(result.content[0]).toEqual({ type: 'image', data: 'aGVsbG8=', mimeType: 'image/jpeg' });
+      const note = result.content[1].text;
+      expect(note).toContain('4 枚');
+      expect(note).toContain('1/4');
+      expect(note).toContain('index=');
+    });
+
+    test('index を client に渡す', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'image', mime_type: 'image/jpeg', file_name: 'shared-2.jpeg',
+        file_size: 2000000, data_base64: 'aGVsbG8=', media_count: 4, index: 2,
+      });
+      await server.callTool('get_message_media', { message_id: 'msg-multi', index: 2 });
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-multi', 2);
+    });
+
+    test('単一画像 (media_count=1) は案内文を付けない', async () => {
+      client.getMessageMedia.mockResolvedValue({
+        type: 'image', mime_type: 'image/png', file_name: 'solo.png',
+        file_size: 100, data_base64: 'aGVsbG8=', media_count: 1, index: 0,
+      });
+      const result = await server.callTool('get_message_media', { message_id: 'msg-solo' });
+      expect(result.content[1].text).not.toContain('枚目');
     });
   });
 

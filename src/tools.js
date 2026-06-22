@@ -186,10 +186,13 @@ function registerTools(server, client) {
   // 9. get_message_media
   server.tool(
     'get_message_media',
-    'メッセージに紐づくメディア (画像/動画/音声) を取得する。画像は AI が直接「見る」ことができる',
-    { message_id: z.string().describe('メッセージID') },
-    async ({ message_id }) => {
-      const result = await client.getMessageMedia(message_id);
+    'メッセージに紐づくメディア (画像/動画/音声) を取得する。画像は AI が直接「見る」ことができる。複数画像が添付されたメッセージは index (0始まり) で1枚ずつ取得する (返り値の media_count を見て全枚 index=0,1,… で呼ぶ)。',
+    {
+      message_id: z.string().describe('メッセージID'),
+      index: z.number().int().min(0).optional().describe('複数添付メッセージで N 枚目 (0始まり) を取得。省略時は 0 枚目。返り値 media_count で総数を確認'),
+    },
+    async ({ message_id, index }) => {
+      const result = await client.getMessageMedia(message_id, index);
       if (result.error) {
         return { content: [{ type: 'text', text: `エラー: ${result.error}` }] };
       }
@@ -198,6 +201,14 @@ function registerTools(server, client) {
       // mime_type ベースで判定 (= type='file' で添付された image も救う、Tealus #292 6/7 Day 22)
       // 旧: result.type === 'image' AND check → LINE で「ファイル」添付された image (= type='file') が fall through
       if (result.mime_type?.startsWith('image/') && result.data_base64) {
+        // #316: 複数画像メッセージなら、エージェントに残りの index 取得を促す案内を付ける
+        const count = result.media_count || 1;
+        const cur = (result.index ?? 0) + 1;
+        let note = `画像: ${result.file_name} (${result.mime_type}, ${result.file_size} bytes)`;
+        if (count > 1) {
+          note += `\nこのメッセージには画像が ${count} 枚あります。これは ${cur}/${count} 枚目です。`
+                + `残りは get_message_media を index=0,1,…,${count - 1} で呼び出して全枚取得してください。`;
+        }
         return {
           content: [
             {
@@ -207,7 +218,7 @@ function registerTools(server, client) {
             },
             {
               type: 'text',
-              text: `画像: ${result.file_name} (${result.mime_type}, ${result.file_size} bytes)`,
+              text: note,
             },
           ],
         };

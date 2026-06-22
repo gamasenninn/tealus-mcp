@@ -10,6 +10,18 @@
 
 ## [Unreleased]
 
+## [0.14.5] - 2026-06-22
+
+### Added
+
+- **`get_message_media` の複数添付（複数画像）対応 — `index` パラメータ** ([tealus#316](https://github.com/gamasenninn/tealus/issues/316)、6/22 出品票4枚一括 dogfood で発覚)
+  - 1メッセージに複数画像が添付された場合（client は「全N枚」グリッド表示）、従来は**1枚目しか取得できなかった**（server の `/messages/:id/media` が rows[0] のみ返す）。
+  - `get_message_media(message_id, index?)` に **`index`（0始まり）** を追加。返り値に **`media_count`** と全件メタ **`media[]`** を含み、複数画像時は text に「**N 枚中 {index+1} 枚目、残りは index=… で取得**」案内を付けてエージェントに逐次取得を促す。
+  - 設計判断: 4枚 = base64 約10.4MB のため全枚一括返却は非現実的 → **index 逐次方式**（1枚 ~2.7MB は動作実績あり）。
+  - `tealusClient.getMessageMedia(messageId, index)` も `index` クエリ対応（省略時は従来どおり）。後方互換維持（単一 media は従来挙動）。
+  - server 側（`tealus` 本体）の同 endpoint 改修と連動。`read_document` の複数添付は別 issue [tealus#317](https://github.com/gamasenninn/tealus/issues/317)。
+  - tests: `tools.test.js` に複数 media（案内文 / index passthrough / 単一は案内なし）+3、全 118 green。
+
 ## [0.14.4] - 2026-06-22
 
 ### Fixed
