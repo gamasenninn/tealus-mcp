@@ -173,6 +173,64 @@ describe('Tealus MCP Tools', () => {
     }
   });
 
+  describe('generate_and_send_image — #313 (response_format 廃止対応)', () => {
+    let origKey, origFetch;
+    beforeEach(() => {
+      origKey = process.env.OPENAI_API_KEY;
+      origFetch = global.fetch;
+      process.env.OPENAI_API_KEY = 'sk-test';
+    });
+    afterEach(() => {
+      if (origKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = origKey;
+      global.fetch = origFetch;
+    });
+
+    test('response_format を body に含めない', async () => {
+      const calls = [];
+      global.fetch = jest.fn(async (url, opts) => {
+        calls.push({ url, opts });
+        return { ok: true, json: async () => ({ data: [{ b64_json: Buffer.from('PNG').toString('base64') }] }) };
+      });
+      await server.callTool('generate_and_send_image', { room_id: 'r', prompt: 'a cat' });
+      const body = JSON.parse(calls[0].opts.body);
+      expect(body).not.toHaveProperty('response_format');
+      expect(body.model).toBeDefined();
+    });
+
+    test('b64_json 応答を処理して pushImage する', async () => {
+      global.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({ data: [{ b64_json: Buffer.from('PNGDATA').toString('base64') }] }),
+      }));
+      await server.callTool('generate_and_send_image', { room_id: 'r', prompt: 'a cat' });
+      expect(client.pushImage).toHaveBeenCalled();
+      const buf = client.pushImage.mock.calls[0][1];
+      expect(Buffer.isBuffer(buf)).toBe(true);
+      expect(buf.toString()).toBe('PNGDATA');
+    });
+
+    test('url 応答 (b64_json なし) は URL を fetch して pushImage する', async () => {
+      let n = 0;
+      global.fetch = jest.fn(async () => {
+        n += 1;
+        if (n === 1) return { ok: true, json: async () => ({ data: [{ url: 'https://img.example/x.png' }] }) };
+        return { ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+      });
+      await server.callTool('generate_and_send_image', { room_id: 'r', prompt: 'a cat' });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(global.fetch.mock.calls[1][0]).toBe('https://img.example/x.png');
+      expect(client.pushImage).toHaveBeenCalled();
+    });
+
+    test('API error はメッセージで返す', async () => {
+      global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ error: { message: 'boom' } }) }));
+      const result = await server.callTool('generate_and_send_image', { room_id: 'r', prompt: 'a cat' });
+      expect(result.content[0].text).toMatch(/boom/);
+      expect(client.pushImage).not.toHaveBeenCalled();
+    });
+  });
+
   test('list_tags が tag 一覧を取得する', async () => {
     const result = await server.callTool('list_tags', { limit: 30 });
     expect(client.getTags).toHaveBeenCalledWith(30);

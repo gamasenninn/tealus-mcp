@@ -10,6 +10,15 @@
 
 ## [Unreleased]
 
+## [0.14.3] - 2026-06-22
+
+### Fixed
+
+- **`generate_and_send_image` が `response_format` で失敗する問題を修正** ([tealus#313](https://github.com/gamasenninn/tealus/issues/313)、6/21 アイコン生成 dogfood で発覚)
+  - 現行 OpenAI Images API が `response_format` パラメータを拒否（`Unknown parameter: 'response_format'`）。これにより /deep・/light 双方で画像生成が失敗していた。
+  - 修正: リクエスト body から `response_format` を除去。応答が **`b64_json`（gpt-image-1 等）でも `url`（dall-e-3 default）でも処理**できるよう両対応化（url の場合は画像を fetch して bytes 化）。
+  - tests: `tools.test.js` に +4（response_format 不送出 / b64_json 処理 / url 処理 / API error）、TDD Red→Green、全 114 green。
+
 ## [0.14.2] - 2026-06-20
 
 ### Fixed

@@ -304,24 +304,34 @@ function registerTools(server, client) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
           },
+          // #313: response_format は現行 Images API で廃止 (Unknown parameter エラー)。
+          // 送らず、応答の b64_json / url いずれの形でも処理する (model 差の両対応)。
           body: JSON.stringify({
             model: 'dall-e-3',
             prompt,
             size: size || '1024x1024',
             n: 1,
-            response_format: 'b64_json',
           }),
         });
         const genData = await genRes.json();
         if (genData.error) {
           return { content: [{ type: 'text', text: `画像生成エラー: ${genData.error.message || JSON.stringify(genData.error)}` }] };
         }
-        const b64 = genData.data?.[0]?.b64_json;
-        const revisedPrompt = genData.data?.[0]?.revised_prompt || prompt;
-        if (!b64) {
-          return { content: [{ type: 'text', text: `画像生成エラー: 応答に b64_json なし: ${JSON.stringify(genData).slice(0, 200)}` }] };
+        const item = genData.data?.[0];
+        const revisedPrompt = item?.revised_prompt || prompt;
+        // #313: b64_json (= gpt-image-1 等) と url (= dall-e-3 default) の両方に対応
+        let buffer;
+        if (item?.b64_json) {
+          buffer = Buffer.from(item.b64_json, 'base64');
+        } else if (item?.url) {
+          const imgRes = await fetch(item.url);
+          if (!imgRes.ok) {
+            return { content: [{ type: 'text', text: `画像生成エラー: 画像 URL 取得失敗 (${imgRes.status})` }] };
+          }
+          buffer = Buffer.from(await imgRes.arrayBuffer());
+        } else {
+          return { content: [{ type: 'text', text: `画像生成エラー: 応答に b64_json / url なし: ${JSON.stringify(genData).slice(0, 200)}` }] };
         }
-        const buffer = Buffer.from(b64, 'base64');
         const filename = `generated-${Date.now()}.png`;
         const result = await client.pushImage(room_id, buffer, filename, caption || '');
         return {
