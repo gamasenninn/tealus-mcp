@@ -366,14 +366,20 @@ function registerTools(server, client) {
   // 14. read_document
   server.tool(
     'read_document',
-    'Tealus メッセージに添付された PDF/DOCX/XLSX を text 化して返す。get_message_media がメタ情報のみ返すのに対し、本 tool は文書本文を text として抽出する。',
-    { message_id: z.string().describe('対象メッセージのID') },
-    async ({ message_id }) => {
-      const media = await client.getMessageMedia(message_id);
+    'Tealus メッセージに添付された PDF/DOCX/XLSX を text 化して返す。get_message_media がメタ情報のみ返すのに対し、本 tool は文書本文を text として抽出する。複数文書が添付されたメッセージは index (0始まり) で1件ずつ取得する (返り値の media_count を見て全件 index=0,1,… で呼ぶ)。',
+    {
+      message_id: z.string().describe('対象メッセージのID'),
+      index: z.number().int().min(0).optional().describe('複数添付メッセージで N 件目 (0始まり) を取得。省略時は 0 件目。返り値 media_count で総数を確認'),
+    },
+    async ({ message_id, index }) => {
+      const media = await client.getMessageMedia(message_id, index);
       if (media.error) {
         return { content: [{ type: 'text', text: `エラー: ${media.error}` }] };
       }
       const result = await extractText(media);
+      // #317: 複数文書メッセージなら、エージェントに残りの index 取得を促す案内を付ける
+      const count = media.media_count || 1;
+      const cur = media.index ?? 0;
       return {
         content: [{
           type: 'text',
@@ -386,6 +392,12 @@ function registerTools(server, client) {
             ...(result.sheets !== undefined ? { sheets: result.sheets.map(s => ({ name: s.name })) } : {}),
             ...(result.truncated ? { truncated: true } : {}),
             ...(result.warning ? { warning: result.warning } : {}),
+            ...(count > 1 ? {
+              media_count: count,
+              index: cur,
+              note: `このメッセージには文書が ${count} 件あります。これは ${cur + 1}/${count} 件目です。`
+                + `残りは read_document を index=0,1,…,${count - 1} で呼び出して全件取得してください。`,
+            } : {}),
           }, null, 2),
         }],
       };

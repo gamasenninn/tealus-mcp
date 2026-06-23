@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+## [0.14.6] - 2026-06-23
+
+### Added
+
+- **`read_document` の複数添付（複数文書）対応 — `index` パラメータ** ([tealus#317](https://github.com/gamasenninn/tealus/issues/317)、#316 の文書版)
+  - 1メッセージに複数の文書（PDF/DOCX/XLSX）が添付された場合、従来は**先頭1件しか text 化できなかった**（`getMessageMedia` を index 無しで呼び、`/messages/:id/media` の rows[0] のみ取得）。これは #316（複数画像）と同型の silent drop。
+  - `read_document(message_id, index?)` に **`index`（0始まり）** を追加。返り値が **`media_count`≥2** のとき payload に `media_count` / `index` / `note`（「N 件中 {index+1} 件目、残りは index=… で取得」案内）を付け、エージェントに逐次取得を促す。単一文書（`media_count` 省略/1）は従来どおり案内なしで後方互換。
+  - server 側 endpoint（#316 で `index`/`media_count`/`media[]` 対応済）をそのまま流用。
+  - tests: `tools.test.js` read_document に +3（index passthrough / 複数案内 / 単一は案内なし）、全 121 green。
+
 ## [0.14.5] - 2026-06-22
 
 ### Added

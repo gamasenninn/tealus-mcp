@@ -550,7 +550,7 @@ describe('Tealus MCP Tools', () => {
     test('PDF を text 化して JSON 応答を返す', async () => {
       client.getMessageMedia.mockResolvedValue(fixtureMedia('sample.pdf', 'application/pdf'));
       const result = await server.callTool('read_document', { message_id: 'msg-pdf-1' });
-      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-pdf-1');
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-pdf-1', undefined);
       expect(result.content[0].type).toBe('text');
       const payload = JSON.parse(result.content[0].text);
       expect(payload.format).toBe('pdf');
@@ -605,6 +605,40 @@ describe('Tealus MCP Tools', () => {
       const result = await server.callTool('read_document', { message_id: 'unknown' });
       expect(result.content[0].text).toContain('エラー');
       expect(result.content[0].text).toContain('メッセージが見つかりません');
+    });
+
+    // #317: 複数文書添付の index 対応 (#316 の文書版)
+    test('index を client に渡す', async () => {
+      client.getMessageMedia.mockResolvedValue(fixtureMedia('sample.pdf', 'application/pdf'));
+      await server.callTool('read_document', { message_id: 'msg-multi-doc', index: 2 });
+      expect(client.getMessageMedia).toHaveBeenCalledWith('msg-multi-doc', 2);
+    });
+
+    test('複数文書メッセージは media_count を含む案内を付ける', async () => {
+      const buffer = fs.readFileSync(path.join(FIXTURES_DIR, 'sample.pdf'));
+      client.getMessageMedia.mockResolvedValue({
+        type: 'file',
+        data_base64: buffer.toString('base64'),
+        mime_type: 'application/pdf',
+        file_name: 'sample.pdf',
+        file_size: buffer.length,
+        media_count: 3,
+        index: 1,
+      });
+      const result = await server.callTool('read_document', { message_id: 'msg-multi-doc', index: 1 });
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.text).toContain('Hello PDF World'); // 本文も抽出されている
+      expect(payload.media_count).toBe(3);
+      expect(payload.index).toBe(1);
+      expect(payload.note).toContain('index=');
+    });
+
+    test('単一文書 (media_count=1 / 省略) は案内を付けない', async () => {
+      client.getMessageMedia.mockResolvedValue(fixtureMedia('sample.pdf', 'application/pdf'));
+      const result = await server.callTool('read_document', { message_id: 'msg-pdf-solo' });
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.media_count).toBeUndefined();
+      expect(payload.note).toBeUndefined();
     });
   });
 
