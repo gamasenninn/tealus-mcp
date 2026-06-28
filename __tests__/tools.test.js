@@ -649,6 +649,12 @@ describe('Tealus MCP Tools', () => {
       expect(client.searchMessages).toHaveBeenCalledWith({ q: '削除', limit: 5 });
     });
 
+    test('has_reaction が client に素通しされる (#325)', async () => {
+      client.searchMessages.mockResolvedValue({ results: [], has_more: false, next_offset: null });
+      await server.callTool('search_messages', { room_id: 'r1', has_reaction: false });
+      expect(client.searchMessages).toHaveBeenCalledWith({ room_id: 'r1', has_reaction: false });
+    });
+
     test('レスポンスが JSON 文字列で text として返る', async () => {
       const mockResult = {
         results: [{

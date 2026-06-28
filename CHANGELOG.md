@@ -10,6 +10,15 @@
 
 ## [Unreleased]
 
+## [0.14.7] - 2026-06-28
+
+### Added
+
+- **`search_messages` に `has_reaction` フィルタ** ([tealus#325](https://github.com/gamasenninn/tealus/issues/325))
+  - `has_reaction=false` でリアクション無しのメッセージだけ、`true` で有りのものだけを **SQL 側で確実に絞れる**。
+  - 動機: 「✅(完了) が付いていないものを抽出」のような依頼で、エージェントが get_messages の大量メッセージを自前でスキャンすると取りこぼす（広いレンジで LLM のスキャン信頼性が落ちる）。サーバー側 `NOT EXISTS(message_reactions)` で決定論的に絞ることで、日付範囲（since/until）+ ページング（offset）と組み合わせ全メッセージ対応にする。
+  - client（`searchMessages`）は全 param を素通しするため、tool schema への param 追加のみ。server 側 `/bot/search` の filter で実装（#324 で get_messages に reactions を載せたのと対）。
+
 ## [0.14.6] - 2026-06-23
 
 ### Added

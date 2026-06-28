@@ -104,6 +104,7 @@ function registerTools(server, client) {
       type: z.enum(['text', 'image', 'voice', 'video', 'stamp', 'system']).optional().describe('メッセージ type 絞り込み'),
       tag_names: z.string().optional().describe('CSV、タグ AND 検索 (例: "TODO,important")'),
       is_done: z.boolean().optional().describe('TODO 完了状態 (tag_names 指定時)'),
+      has_reaction: z.boolean().optional().describe('リアクション有無で絞る。false=リアクション無しのものだけ / true=有りのものだけ。「✅(完了)が付いていないものを抽出」等は has_reaction=false で SQL 側が確実に絞る (大量 message を自前でスキャンしない)'),
       since: z.string().optional().describe('開始日時 ISO 8601'),
       until: z.string().optional().describe('終了日時 ISO 8601'),
       limit: z.number().min(1).max(50).optional().describe('default 10, max 50'),
