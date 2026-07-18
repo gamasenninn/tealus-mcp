@@ -4,6 +4,7 @@
  */
 const { z } = require('zod');
 const { extractText } = require('./lib/documentReader');
+const { buildFormContent } = require('./lib/formContent');
 
 /**
  * MCP Server にツールを登録
@@ -442,6 +443,43 @@ function registerTools(server, client) {
         return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
       } catch (err) {
         return { content: [{ type: 'text', text: `Edit history fetch failed: ${err.message}` }] };
+      }
+    }
+  );
+
+  // send_form: 汎用フォーム primitive (#336)。回答しやすいフォームをルームに投稿する。
+  // 回答者が「回答する」を押すと、回答が reply_mention 付きで返信され CC ブリッジを起動する。
+  server.tool(
+    'send_form',
+    'Tealus のルームに回答フォームを投稿する。radio(単一選択)/text(自由記述) の質問を出し、回答者はボタン1つで返信できる。organon の Q0 等に使う。reply_mention を付けると回答が @cc-<project> を起動する。',
+    {
+      room_id: z.string().describe('送信先ルームID'),
+      title: z.string().describe('フォームのタイトル (例: Day59 Q0)'),
+      intro: z.string().optional().describe('補足説明 (任意)'),
+      reply_mention: z.string().optional().describe('回答本文の先頭に付ける mention。例 "@cc-organon"。省略すると誰も起動しない'),
+      submit_label: z.string().optional().describe('送信ボタン文言 (既定「回答する」)'),
+      fields: z.array(z.object({
+        id: z.string().describe('フィールドID (回答整形で使う、例 q1)'),
+        type: z.enum(['radio', 'text']).describe('radio=単一選択 / text=自由記述'),
+        label: z.string().describe('質問文'),
+        required: z.boolean().optional(),
+        multiline: z.boolean().optional().describe('text 用: 複数行入力'),
+        placeholder: z.string().optional(),
+        options: z.array(z.object({
+          value: z.string(),
+          label: z.string(),
+          allow_text: z.boolean().optional().describe('選択時に補足text欄を出す'),
+          text_label: z.string().optional(),
+        })).optional().describe('radio 用: 選択肢'),
+      })).describe('質問フィールドの配列'),
+    },
+    async ({ room_id, title, intro, reply_mention, submit_label, fields }) => {
+      try {
+        const content = buildFormContent({ title, intro, reply_mention, submit_label, fields });
+        const result = await client.pushForm(room_id, content);
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Form send failed: ${err.message}` }] };
       }
     }
   );

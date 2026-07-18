@@ -50,10 +50,11 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('17ツールが登録される', () => {
+  test('18ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(17);
+    expect(Object.keys(tools)).toHaveLength(18);
     expect(tools).toHaveProperty('send_message');
+    expect(tools).toHaveProperty('send_form');
     expect(tools).toHaveProperty('send_image');
     expect(tools).toHaveProperty('get_messages');
     expect(tools).toHaveProperty('list_rooms');

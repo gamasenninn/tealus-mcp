@@ -120,6 +120,11 @@ class TealusClient {
     return this.request('POST', '/bot/push', { room_id: roomId, content });
   }
 
+  // #336 汎用フォーム primitive: type='form' で投稿。content は可読ヘッダ + fenced tealus-form JSON。
+  async pushForm(roomId, content) {
+    return this.request('POST', '/bot/push', { room_id: roomId, content, type: 'form' });
+  }
+
   async pushImage(roomId, buffer, filename, caption = '') {
     return this._sendForm('/api/bot/push-image', () => {
       const form = new FormData();
