@@ -10,6 +10,19 @@
 
 ## [Unreleased]
 
+## [0.14.8] - 2026-07-18
+
+### Added
+
+- **`send_form` — 汎用フォーム primitive** ([tealus#336](https://github.com/gamasenninn/tealus/issues/336))
+  - ルームに回答フォーム（radio 単一選択 + text 自由記述 + radio 補足欄）を投稿する。回答者が入力して **[回答する] を押すと、回答が reply として投稿され、同時に CC ブリッジを起動**（1アクション完結）。
+  - `send_form(room_id, title, fields=[...], reply_mention="@cc-<project>")`。`reply_mention` に `@cc-organon` / `@cc-kairos` 等を指定すると回答ボタンがその project を起こす。省略すると誰も起動しない（アンケート・承認フロー用途）。
+  - organon Q0 / kairos digest Q0 の「コピペ + 手書き + 別途 mention」摩擦を畳むのが動機。回答本文は全項目が human-readable に入るので突合不要。
+
+### Fixed（配布）
+
+- **`send_form` を正式リリースに載せた。** #336 の send_form は 0.14.7 タグ（`d8f66a8`）の**後ろに無タグ・無バージョンで積まれていた**ため、`#v0.14.6` / `#v0.14.7` のようにタグ pin している参照元（kairos 等）は reload/再接続しても永遠に拾えなかった。本 0.14.8 で version bump + タグを send_form 込みで切り、「タグ ⇒ ツールセット確定」の不変条件を復旧。参照元は pin を `#v0.14.8` に上げて **Claude Code をフル再起動**（stdio 子プロセス再 spawn）で有効化。
+
 ## [0.14.7] - 2026-06-28
 
 ### Added
