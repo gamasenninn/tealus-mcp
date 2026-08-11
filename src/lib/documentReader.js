@@ -119,6 +119,31 @@ async function extractDocx(buffer) {
   return result;
 }
 
+function formatCell(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) {
+    // Date は JSON.stringify で '"2024-01-01T00:00:00.000Z"' のように引用符付きになるため、
+    // 決定的な 'YYYY-MM-DD HH:mm:ss' (UTC) 形式に揃える。
+    return v.toISOString().slice(0, 19).replace('T', ' ');
+  }
+  if (typeof v === 'object') {
+    // formula 等は { result } / { text } を持つことがある
+    if ('result' in v) return String(v.result);
+    if ('text' in v) return String(v.text);
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
+// RFC 4180: カンマ / 引用符 / 改行を含むセルは "" で囲み、内側の " は "" にエスケープ。
+// これにより CSV-like 出力が列区切りと曖昧にならない。
+function csvEscape(value) {
+  if (/[",\n\r]/.test(value)) {
+    return '"' + value.replace(/"/g, '""') + '"';
+  }
+  return value;
+}
+
 async function extractXlsx(buffer) {
   const sheets = [];
   let parseError = null;
@@ -129,17 +154,8 @@ async function extractXlsx(buffer) {
       const rows = [];
       ws.eachRow({ includeEmpty: false }, (row) => {
         // row.values は 1-indexed、空のセルは undefined。filter で詰める
-        const values = (row.values || []).slice(1).map(v => {
-          if (v === null || v === undefined) return '';
-          if (typeof v === 'object') {
-            // formula 等は { result } を持つことがある
-            if ('result' in v) return String(v.result);
-            if ('text' in v) return String(v.text);
-            return JSON.stringify(v);
-          }
-          return String(v);
-        });
-        rows.push(values.join(','));
+        const values = (row.values || []).slice(1).map(formatCell);
+        rows.push(values.map(csvEscape).join(','));
       });
       sheets.push({ name: ws.name, rows: rows.join('\n') });
     });

@@ -355,3 +355,57 @@ describe('extractText - error handling', () => {
     expect(result.warning).toBeDefined();
   });
 });
+
+describe('extractText - XLSX CSV escaping (RFC 4180)', () => {
+  /**
+   * エッジケースセル (カンマ / 引用符 / 改行 / 日付) を含む workbook を
+   * インメモリで生成して extractText に通す。
+   */
+  async function makeEdgeCaseMedia() {
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('EdgeCases');
+    ws.addRow(['desc', 'value']);
+    ws.addRow(['comma', 'Smith, John']);
+    ws.addRow(['quote', 'say "hi"']);
+    ws.addRow(['newline', 'line1\nline2']);
+    ws.addRow(['date', new Date('2024-05-01T09:30:00Z')]);
+    const buf = await wb.xlsx.writeBuffer();
+    return {
+      type: 'file',
+      data_base64: Buffer.from(buf).toString('base64'),
+      mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      file_name: 'edge.xlsx',
+      file_size: buf.length,
+    };
+  }
+
+  test('カンマを含むセルは "" で囲まれ、列区切りと曖昧にならない', async () => {
+    const result = await extractText(await makeEdgeCaseMedia());
+    expect(result.format).toBe('xlsx');
+    expect(result.text).toContain('"Smith, John"');
+  });
+
+  test('引用符を含むセルは "" にエスケープされる', async () => {
+    const result = await extractText(await makeEdgeCaseMedia());
+    expect(result.text).toContain('"say ""hi"""');
+  });
+
+  test('改行を含むセルは "" で囲まれ、レコード境界が壊れない', async () => {
+    const result = await extractText(await makeEdgeCaseMedia());
+    expect(result.text).toContain('"line1\nline2"');
+  });
+
+  test('日付セルは決定的な YYYY-MM-DD HH:mm:ss (UTC) 形式になる', async () => {
+    const result = await extractText(await makeEdgeCaseMedia());
+    expect(result.text).toContain('2024-05-01 09:30:00');
+    // JSON.stringify 由来の引用符付き ISO 表記が混入しない
+    expect(result.text).not.toContain('2024-05-01T09:30:00.000Z');
+  });
+
+  test('既存の通常セル (カンマ等を含まない) はエスケープされない', async () => {
+    const result = await extractText(await makeEdgeCaseMedia());
+    // header 行 desc / value は素のまま
+    expect(result.text).toContain('desc,value');
+  });
+});

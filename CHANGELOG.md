@@ -10,6 +10,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`read_document` XLSX: セル内のカンマ / 引用符 / 改行を RFC 4180 準拠の CSV 形式にエスケープ** ([tealus#232](https://github.com/gamasenninn/tealus/issues/232) follow-up)
+  - 従来は `values.join(',')` で単純連結していたため、セル内のカンマが列区切りと曖昧になる、引用符 / 改行で CSV 構造が壊れる問題があった。
+  - 日付セルも `JSON.stringify` 由来の引用符付き ISO 表記ではなく、決定的な `YYYY-MM-DD HH:mm:ss` (UTC) 形式に統一。
+  - tests: `documentReader.test.js` に +5（カンマ / 引用符 / 改行 / 日付 / 通常セル非エスケープ）、全 132 green。
+
 ## [0.14.8] - 2026-07-18
 
 ### Added
