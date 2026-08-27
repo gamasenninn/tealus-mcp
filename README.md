@@ -129,6 +129,7 @@ bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作�
 | `list_rooms` | 参加中ルーム一覧 |
 | `join_room` | ルームへ参加 |
 | `mark_read` | 既読化 |
+| `edit_message` | 既存メッセージの本文を直す。★ 既定は `before`/`after` の**部分置換**で、置換した箇所数を返す (全文差し替えは `content`。両者は排他)。`expected_count` で件数を検算、`dry_run` で書き込まず確認。編集可否は server の `message_edit_policy` が判定し、旧版は編集履歴に残る (tealus#394) |
 | `read_document` | メッセージ添付の PDF/DOCX/XLSX を text 化 (`get_message_media` がメタ情報のみなのに対し、本 tool は文書本文を抽出)。scan PDF は Gemini API fallback で対応 (要 `GOOGLE_API_KEY`、tealus#233) |
 
 ## 使用例 (Claude Code)

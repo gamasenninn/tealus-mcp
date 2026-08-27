@@ -197,6 +197,25 @@ class TealusClient {
   }
 
   /**
+   * 既存メッセージの本文を差し替える (tealus#394)。
+   *
+   * ★ `/bot/*` ではなく通常のルーム API を叩く。bot も `/api/auth/login` で user JWT を
+   *   取っているため呼べる。編集可否は server 側の `message_edit_policy` が判定する
+   *   (`none` のルームは 403、`sender` は送信者のみ、`member` はメンバーなら可)。
+   *   ここで policy を再実装しない —— 判定を 2 か所に置くと必ずずれる。
+   *
+   * server 側が旧版を `message_edits` に version として積むので、元の本文は失われない。
+   *
+   * @param {string} roomId
+   * @param {string} messageId
+   * @param {string} content - 差し替え後の本文 (全文)
+   * @returns {Promise<{message: object}>}
+   */
+  async editMessage(roomId, messageId, content) {
+    return this.request('PUT', `/rooms/${roomId}/messages/${messageId}`, { content });
+  }
+
+  /**
    * 動画/音声メッセージの文字起こしを取得する。
    *
    * - 既存 cached (status='done') があれば即返却 (`cached: true`)

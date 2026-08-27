@@ -10,6 +10,17 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-27
+
+### Added
+
+- **`edit_message` — 既存メッセージの本文を直す** ([tealus#394](https://github.com/gamasenninn/tealus/issues/394))
+  - `edit_message(message_id, before, after)` で**部分置換**し、**置換した箇所数を返す**。全文差し替えは `content`（`before`/`after` とは排他）。`expected_count` で件数を検算、`dry_run` で書き込まず確認。
+  - ★ **既定を部分置換にしたのは実測が理由。** 通話履歴の STT 誤変換を人が承認 → 本文へ反映する運用を始めた際、承認された候補 1 件（`リクソウ → 陸送`）が本文の **5 か所**に効いた。候補一覧では 1 行に見えるため、**何か所直るのか分からないまま承認される**。全文差し替えだと更に危険で、長文を再生成する過程で無関係な箇所が静かに書き換わりうる。
+  - `room_id` は引数に取らない — `get_message_edit_history` が `room_id` と `current_content` を返すため `message_id` だけで足りる。**server 側の変更は無し**（既存の `PUT /api/rooms/:id/messages/:msgId` を使う）。
+  - 編集可否は server の `message_edit_policy` が判定する（`none` のルームは 403）。**MCP 側で policy を再実装しない** —— 判定を 2 か所に置くとずれる。
+  - `before` が本文に無ければ**エラー**にする（0 箇所を「成功」と報告しない）。旧版は `message_edits` に version として残るので戻せる。
+
 ## [0.14.8] - 2026-07-18
 
 ### Added

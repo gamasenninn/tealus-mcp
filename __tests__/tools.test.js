@@ -38,6 +38,7 @@ function createMockClient() {
     deleteRoom: jest.fn(),
     transcribeMedia: jest.fn(),
     getMessageEditHistory: jest.fn(),
+    editMessage: jest.fn().mockResolvedValue({ message: { id: 'msg1', is_edited: true } }),
   };
 }
 
@@ -50,9 +51,10 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('18ツールが登録される', () => {
+  test('19ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(18);
+    expect(Object.keys(tools)).toHaveLength(19);
+    expect(tools).toHaveProperty('edit_message');
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_form');
     expect(tools).toHaveProperty('send_image');
@@ -71,6 +73,93 @@ describe('Tealus MCP Tools', () => {
     expect(tools).toHaveProperty('generate_and_send_image');
     expect(tools).toHaveProperty('transcribe_media');
     expect(tools).toHaveProperty('get_message_edit_history');
+  });
+
+  // edit_message — 既存メッセージの本文を直す (tealus#394)
+  //
+  // ★ 部分置換を既定にしたのは 2026-08-27 の実測が理由。通話履歴の修正候補 1 件
+  //   (リクソウ → 陸送) が本文の 5 か所に効き、「候補一覧では 1 行に見えるのに
+  //   何か所直るか分からない」形になった。件数を返す / 事前に確かめられることを
+  //   ツールの仕様として固定する。
+  describe('edit_message', () => {
+    const HISTORY = {
+      message_id: 'msg-e1',
+      type: 'text',
+      room_id: 'room-1',
+      is_edited: false,
+      current_content: 'リクソウさんに渡した。リクソウさんが電話した。',
+      text_edit_history: [],
+      voice_transcription_versions: [],
+    };
+
+    beforeEach(() => {
+      client.getMessageEditHistory.mockResolvedValue(HISTORY);
+    });
+
+    test('before/after で全ての出現を置換し、件数を返す', async () => {
+      const result = await server.callTool('edit_message', {
+        message_id: 'msg-e1', before: 'リクソウ', after: '陸送',
+      });
+      expect(client.editMessage).toHaveBeenCalledWith(
+        'room-1', 'msg-e1', '陸送さんに渡した。陸送さんが電話した。'
+      );
+      expect(result.content[0].text).toContain('2');
+    });
+
+    test('expected_count が実際と違えば置換しない', async () => {
+      const result = await server.callTool('edit_message', {
+        message_id: 'msg-e1', before: 'リクソウ', after: '陸送', expected_count: 1,
+      });
+      expect(client.editMessage).not.toHaveBeenCalled();
+      expect(result.content[0].text).toMatch(/2/);
+    });
+
+    test('dry_run は書き込まず件数を返す', async () => {
+      const result = await server.callTool('edit_message', {
+        message_id: 'msg-e1', before: 'リクソウ', after: '陸送', dry_run: true,
+      });
+      expect(client.editMessage).not.toHaveBeenCalled();
+      expect(result.content[0].text).toContain('2');
+    });
+
+    test('★ before が本文に無ければエラー (無かったことを成功と報告しない)', async () => {
+      const result = await server.callTool('edit_message', {
+        message_id: 'msg-e1', before: '存在しない語', after: 'x',
+      });
+      expect(client.editMessage).not.toHaveBeenCalled();
+      expect(result.content[0].text).toMatch(/エラー|見つかりません/);
+    });
+
+    test('before と content の同時指定はエラー', async () => {
+      const result = await server.callTool('edit_message', {
+        message_id: 'msg-e1', before: 'リクソウ', after: '陸送', content: '全文',
+      });
+      expect(client.editMessage).not.toHaveBeenCalled();
+      expect(result.content[0].text).toMatch(/エラー/);
+    });
+
+    test('before も content も無ければエラー', async () => {
+      const result = await server.callTool('edit_message', { message_id: 'msg-e1' });
+      expect(client.editMessage).not.toHaveBeenCalled();
+      expect(result.content[0].text).toMatch(/エラー/);
+    });
+
+    test('content モードは渡した本文がそのまま届く', async () => {
+      await server.callTool('edit_message', {
+        message_id: 'msg-e1', content: '差し替えた本文',
+      });
+      expect(client.editMessage).toHaveBeenCalledWith('room-1', 'msg-e1', '差し替えた本文');
+    });
+
+    test('★ 編集不可ルームの 403 は握り潰さずそのまま返す', async () => {
+      client.editMessage.mockRejectedValue(
+        new Error('Tealus API PUT /rooms/room-1/messages/msg-e1 failed: 403 Forbidden: このルームではメッセージ編集が許可されていません')
+      );
+      const result = await server.callTool('edit_message', {
+        message_id: 'msg-e1', before: 'リクソウ', after: '陸送',
+      });
+      expect(result.content[0].text).toContain('403');
+    });
   });
 
   describe('get_message_edit_history', () => {

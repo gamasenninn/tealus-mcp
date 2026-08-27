@@ -447,6 +447,77 @@ function registerTools(server, client) {
     }
   );
 
+  // 18. edit_message — 既存メッセージの本文を直す (tealus#394)
+  //
+  // ★ 既定を「全文差し替え」ではなく「before/after の部分置換」にした理由:
+  //   2026-08-27、通話履歴の STT 誤変換を人が承認 → 本文へ反映する運用を始めたとき、
+  //   承認された候補 1 件 (リクソウ → 陸送) が本文の 5 か所に効いた。候補一覧では
+  //   1 行に見えるので、**何か所直るのかが見えないまま承認される**。
+  //   全文差し替えだと更に悪く、LLM が 3000 字を再生成する過程で無関係な箇所が
+  //   静かに書き換わりうる。部分置換なら触る範囲が入力の形で限定される。
+  //
+  // room_id は引数に取らない。edit-history が room_id を返すので message_id だけで足りる。
+  server.tool(
+    'edit_message',
+    '既存メッセージの本文を直す。★ 既定は before/after の部分置換で、置換した箇所数を返す (全文差し替えは content を使う。両者は排他)。expected_count で件数を検算でき、dry_run で書き込まずに確認できる。編集可否は server の message_edit_policy が判定する (編集不可ルームは 403)。旧版は編集履歴に version として残る。',
+    {
+      message_id: z.string().describe('対象メッセージのID'),
+      before: z.string().optional().describe('部分置換モード: 置換前の文字列 (本文に無ければエラー)'),
+      after: z.string().optional().describe('部分置換モード: 置換後の文字列'),
+      expected_count: z.number().optional().describe('部分置換モード: 想定する出現数。実際と違えば置換しない'),
+      content: z.string().optional().describe('全文差し替えモード: 差し替え後の本文全体 (before/after とは排他)'),
+      dry_run: z.boolean().optional().describe('true なら書き込まず、件数と置換後の前後だけ返す'),
+    },
+    async ({ message_id, before, after, expected_count, content, dry_run }) => {
+      const partial = before !== undefined;
+      const full = content !== undefined;
+      if (partial === full) {
+        return { content: [{ type: 'text', text: 'エラー: before/after と content はどちらか一方を指定してください' }] };
+      }
+      if (partial && after === undefined) {
+        return { content: [{ type: 'text', text: 'エラー: before を指定した場合は after も必要です' }] };
+      }
+
+      try {
+        // 現在の本文と room_id は edit-history から取る (専用 endpoint を増やさない)
+        const hist = await client.getMessageEditHistory(message_id);
+        if (hist.error) {
+          return { content: [{ type: 'text', text: `エラー: ${hist.error}` }] };
+        }
+
+        let next;
+        let count = null;
+        if (partial) {
+          const current = hist.current_content || '';
+          count = current.split(before).length - 1;
+          if (count === 0) {
+            // ★ 「無かった」を成功と報告しない。silent no-op は後から気づけない
+            return { content: [{ type: 'text', text: `エラー: 「${before}」は本文に見つかりません (0 箇所)` }] };
+          }
+          if (expected_count !== undefined && expected_count !== count) {
+            return { content: [{ type: 'text', text: `エラー: 想定 ${expected_count} 箇所に対し、実際は ${count} 箇所です。置換していません` }] };
+          }
+          next = current.split(before).join(after);
+        } else {
+          next = content;
+        }
+
+        if (dry_run) {
+          const head = next.length > 400 ? `${next.slice(0, 400)}…` : next;
+          const n = partial ? `${count} 箇所を置換します (未実行)` : '全文を差し替えます (未実行)';
+          return { content: [{ type: 'text', text: `[dry_run] ${n}\n---\n${head}` }] };
+        }
+
+        await client.editMessage(hist.room_id, message_id, next);
+        const done = partial ? `${count} 箇所を置換しました` : '全文を差し替えました';
+        return { content: [{ type: 'text', text: `${done} (message_id: ${message_id})` }] };
+      } catch (err) {
+        // 403 (編集不可ルーム) 等は握り潰さずそのまま出す (#303 同型)
+        return { content: [{ type: 'text', text: `編集に失敗しました: ${err.message}` }] };
+      }
+    }
+  );
+
   // send_form: 汎用フォーム primitive (#336)。回答しやすいフォームをルームに投稿する。
   // 回答者が「回答する」を押すと、回答が reply_mention 付きで返信され CC ブリッジを起動する。
   server.tool(
