@@ -12,10 +12,9 @@
  *   2. cwd の .env (HTTP host mode で運用する時の便利機能、なければ silent skip)
  */
 require('dotenv').config();
-const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { TealusClient } = require('./tealusClient');
-const { registerTools } = require('./tools');
+const { createMcpServer: createServerWithClient } = require('./server');
 
 // --- args (minimal parse、no extra dep) ---
 function parseArgs(argv) {
@@ -46,10 +45,9 @@ if (!userId || !password) {
 const client = new TealusClient({ apiUrl, userId, password });
 
 // McpServer factory (HTTP の場合 session ごとに新 instance、stdio は 1 回 only)
+// ★ tealus#484 組み立ては server.js (案内文 instructions を渡す。テストから組み立てられるように切り出した)
 function createMcpServer() {
-  const s = new McpServer({ name: 'tealus', version: '1.0.0' });
-  registerTools(s, client);
-  return s;
+  return createServerWithClient(client);
 }
 
 async function main() {

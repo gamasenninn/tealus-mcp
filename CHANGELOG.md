@@ -10,6 +10,16 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-05
+
+### Added
+
+- **MCP の案内文 (instructions) に、Tealus での返し方の決まりを載せた** ([tealus#484](https://github.com/gamasenninn/tealus/issues/484))
+  - つないだ session が最初に読む案内文に、5 つの決まりを入れた: mention は行頭に飾りを付けずに書く / `@cc-` は 1 日遅れて困る便だけ / 同報への返信は発信者 1 人に / 起こされたら本文は道具で取りに行く / 先頭の `@アシスタント` はアシスタントを起こす
+  - ★ **なぜここか**: 以前は Tealus の listen-tealus skill の中にだけあり、skill を使わない受け手 (PaneDeck のペイン、別のエージェント) には届かなかった。MCP の案内文は受け取り方にもエージェントにも依らずに届く。**決まりの真実は `src/instructions.js` 1 か所**で、Tealus 側はここを指す
+  - 組み立てを `src/server.js` に切り出した (env の確認や process.exit を通らずにテストから組み立てるため)。stdio / http の両方が同じ組み立てを使う
+  - ★ **効かせるには**: pin を `#v0.16.0` に上げて **Claude Code をフル再起動** (in-app reload では stdio の子プロセスが残る)
+
 ## [0.15.0] - 2026-08-27
 
 ### Added
