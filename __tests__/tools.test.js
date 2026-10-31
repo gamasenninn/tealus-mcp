@@ -733,6 +733,14 @@ describe('Tealus MCP Tools', () => {
   });
 
   describe('search_messages', () => {
+    test('★ since / until の説明に「時間帯を省くとサーバーの時間帯で読む・Z は世界時」がある (tealus 改善ループ 30、10-31 小野さん判断 1)', () => {
+      const { schema } = server.getTools().search_messages;
+      for (const key of ['since', 'until']) {
+        expect(schema[key].description).toContain('時間帯を省くと');
+        expect(schema[key].description).toContain('世界時');
+      }
+    });
+
     test('client.searchMessages が引数とともに呼ばれる', async () => {
       client.searchMessages.mockResolvedValue({ results: [], has_more: false, next_offset: null });
       await server.callTool('search_messages', { q: '削除', limit: 5 });
