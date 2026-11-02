@@ -42,10 +42,12 @@ function registerTools(server, client) {
   server.tool(
     'get_messages',
     'ルームのメッセージ履歴を取得する。voice メッセージの transcription は default で formatted_text のみ inline (raw_text は省略)。' +
-    'verbosity 制御: include_raw=true で raw_text を追加、include_transcription=false で text を省略し id+status+version のみ返す (大量取得時の軽量モード)。',
+    'verbosity 制御: include_raw=true で raw_text を追加、include_transcription=false で text を省略し id+status+version のみ返す (大量取得時の軽量モード)。' +
+    '★ 返すのは新しい順に最大 100 件 (100 を超える limit は黙って 100 になる)。それより古い投稿は search_messages の since / until で探し、' +
+    '1 件の全文は get_message_edit_history(message_id) の current_content で取る。',
     {
       room_id: z.string().describe('ルームID'),
-      limit: z.number().optional().describe('取得件数（デフォルト20、最大100）'),
+      limit: z.number().optional().describe('取得件数（デフォルト20、最大100。100 を超えても 100 件）'),
       include_transcription: z.boolean().optional().describe('voice の transcription text を含めるか (default true、false で id/status/version のみ)'),
       include_raw: z.boolean().optional().describe('raw_text (Whisper 生出力) を含めるか (default false、debug / 整形精度評価用)'),
     },
@@ -94,7 +96,8 @@ function registerTools(server, client) {
   // 7. search_messages
   server.tool(
     'search_messages',
-    '直近の議論を検索する。snippet は索引、詳細が要れば get_messages で再取得する。' +
+    '直近の議論を検索する。snippet は索引 (約 200 字)。' +
+    '★ 見つけた投稿の全文は get_message_edit_history(message_id) の current_content で取る (get_messages は直近の件数しか返さず、ID では引けない)。' +
     '使い方: まず q + room_id か since/until で narrow に絞る → 結果が少なすぎたら範囲を広げる。' +
     '日本語 2 文字 query は index が効きにくく遅い (3 文字以上推奨)。' +
     'q / room_id / sender_id / since / tag_names / type のうち少なくとも 1 つを指定すること。',
@@ -102,7 +105,7 @@ function registerTools(server, client) {
       q: z.string().optional().describe('キーワード (ILIKE)。3 文字以上推奨'),
       room_id: z.string().optional().describe('単一ルーム指定 (省略時 cross-room)'),
       sender_id: z.string().optional().describe('発言者の user ID'),
-      type: z.enum(['text', 'image', 'voice', 'video', 'stamp', 'system']).optional().describe('メッセージ type 絞り込み'),
+      type: z.enum(['text', 'image', 'voice', 'video', 'file', 'stamp', 'system', 'form']).optional().describe('メッセージ type 絞り込み (file = 添付ファイル、form = 回答フォーム)'),
       tag_names: z.string().optional().describe('CSV、タグ AND 検索 (例: "TODO,important")'),
       is_done: z.boolean().optional().describe('TODO 完了状態 (tag_names 指定時)'),
       has_reaction: z.boolean().optional().describe('リアクション有無で絞る。false=リアクション無しのものだけ / true=有りのものだけ。「✅(完了)が付いていないものを抽出」等は has_reaction=false で SQL 側が確実に絞る (大量 message を自前でスキャンしない)'),
@@ -430,7 +433,7 @@ function registerTools(server, client) {
   // 17. get_message_edit_history (= 5/24 user 提案、Day 8、organon daily cycle で edit history 観察用)
   server.tool(
     'get_message_edit_history',
-    'メッセージの編集履歴 (text edits + voice/video transcription versions) を統合返却する。voice/video の場合は raw_text (Whisper output) vs formatted_text (AI整形) vs user-corrected の version history を取得可能、text の場合は message_edits table の version history を返す。organon class の daily cycle で raw STT vs user-corrected pair を直接観察するための tool (= 別途 mining script を運用する必要を解消、organic ontology paradigm の simplicity 1 instrument 主義)。',
+    'メッセージの編集履歴 (text edits + voice/video transcription versions) を統合返却する。★ 1 件の今の全文 (current_content) を ID で取るのにも使える (search_messages の snippet の続きを読むとき)。voice/video の場合は raw_text (Whisper output) vs formatted_text (AI整形) vs user-corrected の version history を取得可能、text の場合は message_edits table の version history を返す。organon class の daily cycle で raw STT vs user-corrected pair を直接観察するための tool (= 別途 mining script を運用する必要を解消、organic ontology paradigm の simplicity 1 instrument 主義)。',
     {
       message_id: z.string().describe('対象メッセージのID'),
     },

@@ -163,6 +163,12 @@ describe('Tealus MCP Tools', () => {
   });
 
   describe('get_message_edit_history', () => {
+    test('★ 1 件の全文を ID で取る道具としても説明する (tealus 改善ループ 38)', () => {
+      const { description } = server.getTools().get_message_edit_history;
+      expect(description).toContain('current_content');
+      expect(description).toContain('全文');
+    });
+
     test('text 編集履歴を返す', async () => {
       client.getMessageEditHistory.mockResolvedValue({
         message_id: 'msg-text-1',
@@ -376,6 +382,13 @@ describe('Tealus MCP Tools', () => {
   });
 
   describe('get_messages', () => {
+    test('★ 100 件を超える limit は 100 に丸めること・それより古い投稿の探し方を説明に書く (tealus 改善ループ 38)', () => {
+      const { description, schema } = server.getTools().get_messages;
+      expect(description).toContain('100');
+      expect(description).toContain('search_messages');
+      expect(schema.limit.description).toContain('100');
+    });
+
     test('メッセージ履歴を取得する (limit 指定)', async () => {
       const result = await server.callTool('get_messages', { room_id: 'room1', limit: 10 });
       expect(client.getMessages).toHaveBeenCalledWith('room1', 10, {
@@ -739,6 +752,20 @@ describe('Tealus MCP Tools', () => {
         expect(schema[key].description).toContain('時間帯を省くと');
         expect(schema[key].description).toContain('世界時');
       }
+    });
+
+    // ★ tealus 改善ループ 38 (2026-11-02 小野さん判断 5): 説明が実際とずれていた
+    test('★ 古い投稿の全文の取り方を説明に書く (get_messages は直近の件数しか返さず ID で引けない)', () => {
+      const { description } = server.getTools().search_messages;
+      expect(description).toContain('get_message_edit_history');
+      expect(description).toContain('current_content');
+      expect(description).not.toContain('詳細が要れば get_messages で再取得する');
+    });
+
+    test('★ type に file と form も選べる (本体の type にはあるのに選べなかった)', () => {
+      const { schema } = server.getTools().search_messages;
+      expect(schema.type.safeParse('file').success).toBe(true);
+      expect(schema.type.safeParse('form').success).toBe(true);
     });
 
     test('client.searchMessages が引数とともに呼ばれる', async () => {

@@ -10,6 +10,19 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-02
+
+### Changed
+
+- **道具の説明を実際の振る舞いに合わせた** (tealus 改善ループ 38、2026-11-02 小野さん判断 5)。AI は説明だけを見て道具を使うので、ずれると黙った誤答になる
+  - `search_messages`: 「詳細が要れば get_messages で再取得」と書いていたが、get_messages は直近の件数しか返さず ID で引けない。見つけた投稿の全文は `get_message_edit_history(message_id)` の `current_content` で取る、と書いた
+  - `get_message_edit_history`: 1 件の今の全文を ID で取るのにも使える、と書いた
+  - `get_messages`: 返すのは新しい順に最大 100 件 (100 を超える limit は黙って 100 になる)。それより古い投稿の探し方を書いた
+
+### Added
+
+- **`search_messages` の `type` に `file` (添付ファイル) と `form` (回答フォーム) を足した**。Tealus の本体には前からある種類で、本体の検索はそのまま受ける
+
 ## [0.16.1] - 2026-10-31
 
 ### Changed
