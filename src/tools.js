@@ -5,11 +5,13 @@
 const { z } = require('zod');
 const { extractText } = require('./lib/documentReader');
 const { buildFormContent } = require('./lib/formContent');
+const { resolveAttachable } = require('./lib/fileGuard');
+const fsp = require('fs/promises');
 
 /**
  * MCP Server にツールを登録
  */
-function registerTools(server, client) {
+function registerTools(server, client, opts = {}) {
   // 1. send_message
   server.tool(
     'send_message',
@@ -557,6 +559,33 @@ function registerTools(server, client) {
       }
     }
   );
+
+  // send_file (tealus 改善ループ 89) — パスを渡すと、そのファイルをそのまま添付する
+  // ★ 既定では出さない。添付してよいフォルダ (TEALUS_FILE_ROOT) を明示した班だけ。社内のアシスタント (agent-server) には設定しない
+  // ★ 判定は lib/fileGuard.js (フォルダの外・「.」で始まるもの・鍵らしい名前・上限を断る)
+  if (opts.fileRoot) {
+    server.tool(
+      'send_file',
+      'Tealus のルームに、手元のファイルをパス指定でそのまま添付する (中身を書き写さない)。' +
+      '添付できるのは許されたフォルダ (' + opts.fileRoot + ') の中だけで、「.」で始まるもの (.env など)・鍵らしい名前・大きすぎるものは断られる。' +
+      '画像 (png / jpg / gif / webp) は画像として、ほかはファイルとして送る。',
+      {
+        room_id: z.string().describe('送信先ルームID'),
+        path: z.string().describe('添付するファイルのパス (許されたフォルダからの相対、または絶対)'),
+        caption: z.string().optional().describe('添付メッセージ text (任意、1-2 行の説明)'),
+      },
+      async ({ room_id, path: p, caption }) => {
+        const a = resolveAttachable(opts.fileRoot, p);
+        if (!a.ok) return { isError: true, content: [{ type: 'text', text: `添付しませんでした: ${a.reason}` }] };
+        const buffer = await fsp.readFile(a.absPath);
+        const raster = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(a.mimeType);
+        const result = raster
+          ? await client.pushImage(room_id, buffer, a.filename, caption || '')
+          : await client.pushFile(room_id, buffer, a.filename, a.mimeType, caption || '');
+        return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      }
+    );
+  }
 }
 
 module.exports = { registerTools };

@@ -87,6 +87,7 @@ Tealus 本体側 (port 3000) で `/mcp/*` proxy が必要 (`createProxyMiddlewar
 | `TEALUS_USER_ID` | ○ | Tealus 上の bot ユーザ ID (旧 `TEALUS_BOT_ID` も互換) |
 | `TEALUS_PASSWORD` | ○ | bot ユーザのパスワード (旧 `TEALUS_BOT_PASS` も互換) |
 | `JWT_SECRET` | △ | `--transport=http` の場合のみ必須。Tealus 本体 server / agent-server と **完全に同じ値**にする (proxy で pass-through、検証は本 server 側) |
+| `TEALUS_FILE_ROOT` | × | `send_file` (パス指定でファイルを添付) を使えるようにするフォルダ (絶対パス)。**設定したときだけ道具が出る**。添付できるのはこの中だけで、「.」で始まるもの (`.env` / `.mcp.json` / `.git` の中)・鍵らしい名前・上限 (画像 10MB / ほか 100MB) を超えるものは断る。★ 誰でも話しかけられる AI (社内のアシスタントなど) には設定しないこと (v0.18.0) |
 | `MCP_HTTP_PORT` | × | HTTP transport の listen port (default: `3200`)、`--transport=http` 時のみ effect |
 
 bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作成する。
