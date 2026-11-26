@@ -10,6 +10,14 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-26
+
+### Added
+
+- **`list_tasks` / `add_task` / `update_task`: タスク一覧** (tealus docs/16、#661、2026-11-26 小野さん判断)。会話から AI がまとめた「人のやること」を、その人の一覧に書く。本体の `/api/bot/tasks` を使う (本体に 047 の表が要る)
+  - 誰の一覧かは `for_user_id` → `X-Tealus-Requester` で渡す。社内のアシスタント (agent-server の中継) 経由では中継が依頼した人で置き換えるので不要
+  - ★ 済みにする欄・消す道具は無い。済んだと読んだら `ai_suggests_done: true` (本人が画面で押して済みにする)
+
 ## [0.18.0] - 2026-11-20
 
 ### Added

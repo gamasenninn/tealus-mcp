@@ -52,13 +52,14 @@ class TealusClient {
     throw err;
   }
 
-  async _send(method, path, body) {
+  async _send(method, path, body, extraHeaders = {}) {
     await this.login();
     const options = {
       method,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${this.token}`,
+        ...extraHeaders,
       },
     };
     if (body) options.body = JSON.stringify(body);
@@ -74,13 +75,13 @@ class TealusClient {
    * - 401: bot JWT 失効とみなし token を破棄して 1 回だけ再ログイン retry (直線・再入なし)
    * - 非2xx (401 retry 後含む): status/body 付き Error を throw
    */
-  async request(method, path, body = null) {
-    let res = await this._send(method, path, body);
+  async request(method, path, body = null, extraHeaders = {}) {
+    let res = await this._send(method, path, body, extraHeaders);
 
     if (res.status === 401) {
       this.token = null;
       await this.login(true);
-      res = await this._send(method, path, body);
+      res = await this._send(method, path, body, extraHeaders);
     }
 
     await this._throwIfNotOk(res, method, path);
@@ -253,6 +254,28 @@ class TealusClient {
       `/bot/messages/${messageId}/tags/${encodeURIComponent(tagName)}/done`,
       { is_done: isDone }
     );
+  }
+
+  // タスク一覧 (tealus docs/16、#661)。誰の一覧かは X-Tealus-Requester で渡す。
+  // ★ 社内のアシスタント (agent-server の中継) 経由では中継がこのヘッダを依頼した人で置き換えるので、渡さなくてよい
+  _requesterHeader(forUserId) {
+    return forUserId ? { 'X-Tealus-Requester': forUserId } : {};
+  }
+
+  async listTasks({ forUserId, status, roomId } = {}) {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (roomId) qs.set('room_id', roomId);
+    const q = qs.toString();
+    return this.request('GET', `/bot/tasks${q ? `?${q}` : ''}`, null, this._requesterHeader(forUserId));
+  }
+
+  async addTask(fields, forUserId) {
+    return this.request('POST', '/bot/tasks', fields, this._requesterHeader(forUserId));
+  }
+
+  async updateTask(taskId, fields, forUserId) {
+    return this.request('PATCH', `/bot/tasks/${taskId}`, fields, this._requesterHeader(forUserId));
   }
 
   async createRoom(name, memberIds = [], type = 'group') {

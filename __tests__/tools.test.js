@@ -39,6 +39,9 @@ function createMockClient() {
     transcribeMedia: jest.fn(),
     getMessageEditHistory: jest.fn(),
     editMessage: jest.fn().mockResolvedValue({ message: { id: 'msg1', is_edited: true } }),
+    listTasks: jest.fn().mockResolvedValue({ tasks: [] }),
+    addTask: jest.fn().mockResolvedValue({ task: { id: 't1' } }),
+    updateTask: jest.fn().mockResolvedValue({ task: { id: 't1' } }),
   };
 }
 
@@ -51,9 +54,12 @@ describe('Tealus MCP Tools', () => {
     registerTools(server, client);
   });
 
-  test('19ツールが登録される', () => {
+  test('22ツールが登録される', () => {
     const tools = server.getTools();
-    expect(Object.keys(tools)).toHaveLength(19);
+    expect(Object.keys(tools)).toHaveLength(22);
+    expect(tools).toHaveProperty('list_tasks');
+    expect(tools).toHaveProperty('add_task');
+    expect(tools).toHaveProperty('update_task');
     expect(tools).toHaveProperty('edit_message');
     expect(tools).toHaveProperty('send_message');
     expect(tools).toHaveProperty('send_form');
@@ -1049,5 +1055,31 @@ describe('TealusClient', () => {
     expect(client.apiUrl).toBe('http://localhost:3000');
     expect(client.userId).toBe('tanaka');
     expect(client.token).toBeNull();
+  });
+});
+
+describe('タスク一覧の道具 (tealus docs/16、#661)', () => {
+  let server, client;
+  beforeEach(() => {
+    server = createMockServer();
+    client = createMockClient();
+    registerTools(server, client);
+  });
+
+  test('list_tasks: 絞りと誰のタスクかを渡す', async () => {
+    await server.callTool('list_tasks', { for_user_id: 'u1', status: 'done', room_id: 'r1' });
+    expect(client.listTasks).toHaveBeenCalledWith({ forUserId: 'u1', status: 'done', roomId: 'r1' });
+  });
+
+  test('add_task: 渡された欄だけを送る (status は欄に無い = AI は済みにしない)', async () => {
+    await server.callTool('add_task', { for_user_id: 'u1', title: '見積り', section: 'decide', source_message_ids: ['m1'] });
+    expect(client.addTask).toHaveBeenCalledWith({ title: '見積り', section: 'decide', source_message_ids: ['m1'] }, 'u1');
+    expect(server.getTools().add_task.schema).not.toHaveProperty('status');
+  });
+
+  test('update_task: 済みにする欄は無く、「済んだようです」の印は付けられる', async () => {
+    await server.callTool('update_task', { for_user_id: 'u1', task_id: 't9', ai_suggests_done: true, note: '登録できたと聞いた' });
+    expect(client.updateTask).toHaveBeenCalledWith('t9', { ai_suggests_done: true, note: '登録できたと聞いた' }, 'u1');
+    expect(server.getTools().update_task.schema).not.toHaveProperty('status');
   });
 });

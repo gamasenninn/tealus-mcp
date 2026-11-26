@@ -125,6 +125,9 @@ bot ユーザは Tealus 管理画面 (`/admin`) の「Bot ユーザ」から作�
 | `search_messages` | キーワード / タグ / 期間 / 発言者でメッセージ全文検索 (snippet ハイライト付) |
 | `list_tags` | Bot メンバー全 room の tag 一覧を usage 順で返す discovery primitive (search_messages の前段で tag 名を発見) |
 | `mark_tag_done` | メッセージのタグ完了状態 (is_done) を更新 |
+| `list_tasks` | その人のタスク一覧を読む (既定は残り。v0.19.0、tealus docs/16) |
+| `add_task` | 会話から拾った「人のやること」を 1 件足す (v0.19.0) |
+| `update_task` | タスクを直す。★ 済みにはできず「済んだようです」の印まで (v0.19.0) |
 | `create_room` | 新しいグループルームを作成 (bot は admin として自動追加) |
 | `delete_room` | グループルームを削除 (creator + solo member のみ、CASCADE で関連データも削除) |
 | `list_rooms` | 参加中ルーム一覧 |

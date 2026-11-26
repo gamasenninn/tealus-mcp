@@ -560,6 +560,70 @@ function registerTools(server, client, opts = {}) {
     }
   );
 
+  // タスク一覧 (tealus docs/16、#661) — 会話からまとめた「人のやること」を、その人の一覧に書く
+  // ★ 済みにする欄・消す道具は無い (済みにするのは本人。AI は ai_suggests_done の印まで)
+  const forUser = z.string().optional().describe(
+    '誰のタスク一覧か (Tealus の利用者 ID)。社内のアシスタントからは不要 (依頼した人に自動で決まる)。cc の班などから書くときは必須');
+  const SECTION = z.enum(['decide', 'do', 'waiting', 'later'])
+    .describe('区分: decide 決める / do 手を動かす / waiting 待ち / later 今日でなくてよい');
+  const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+
+  server.tool(
+    'list_tasks',
+    'その人のタスク一覧を読む。既定は残り (open と held)。並びは 部屋 → 区分 → 並び順。' +
+    '足す前に読み、同じ話がもうあれば add_task でなく update_task で直すこと (重複を作らない)。',
+    {
+      for_user_id: forUser,
+      status: z.enum(['open', 'done', 'held', 'all']).optional().describe('絞り。省略で残り (open と held)'),
+      room_id: z.string().optional().describe('括りの部屋で絞る'),
+    },
+    async ({ for_user_id, status, room_id }) => {
+      const result = await client.listTasks({ forUserId: for_user_id, status, roomId: room_id });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'add_task',
+    '会話から拾った「人のやること」を 1 件、その人のタスク一覧に足す。title は印刷で 1 行に収まる長さで、' +
+    'note に「なぜ・何を言えばよいか」。room_id は何の話かの括り (その人が入っている部屋だけ)、' +
+    'source_message_ids は元の投稿 (その人の部屋のものだけ)。済みの状態では足せない。',
+    {
+      for_user_id: forUser,
+      title: z.string().describe('題 (1 行)'),
+      note: z.string().optional().describe('ひとこと'),
+      section: SECTION.optional(),
+      room_id: z.string().optional().describe('括りの部屋 (省略 = 部屋なし)'),
+      source_message_ids: z.array(z.string()).optional().describe('元の投稿の ID'),
+    },
+    async (args) => {
+      const result = await client.addTask(pick(args, ['title', 'note', 'section', 'room_id', 'source_message_ids']), args.for_user_id);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'update_task',
+    'タスクを直す (題・ひとこと・区分・部屋・元の投稿・並び順)。★ 済みにはできない: 済んだと読んだら ai_suggests_done: true を付け、' +
+    'note に根拠を書く (本人が画面で押して済みにする)。同じ話の 2 件をまとめるときは、片方を直し、もう片方に ai_suggests_done: true と「○○にまとめた」。',
+    {
+      for_user_id: forUser,
+      task_id: z.string().describe('タスクの ID (list_tasks で見る)'),
+      title: z.string().optional(),
+      note: z.string().optional(),
+      section: SECTION.optional(),
+      room_id: z.string().optional(),
+      source_message_ids: z.array(z.string()).optional(),
+      sort_order: z.number().int().optional().describe('同じ括りの中の並び (小さいほど上)'),
+      ai_suggests_done: z.boolean().optional().describe('済んだようです、の印'),
+    },
+    async (args) => {
+      const fields = pick(args, ['title', 'note', 'section', 'room_id', 'source_message_ids', 'sort_order', 'ai_suggests_done']);
+      const result = await client.updateTask(args.task_id, fields, args.for_user_id);
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
   // send_file (tealus 改善ループ 89) — パスを渡すと、そのファイルをそのまま添付する
   // ★ 既定では出さない。添付してよいフォルダ (TEALUS_FILE_ROOT) を明示した班だけ。社内のアシスタント (agent-server) には設定しない
   // ★ 判定は lib/fileGuard.js (フォルダの外・「.」で始まるもの・鍵らしい名前・上限を断る)

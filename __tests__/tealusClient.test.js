@@ -90,3 +90,37 @@ describe('TealusClient.pushFile/pushImage — 同型 hardening', () => {
     expect(loginCallCount()).toBe(2);
   });
 });
+
+describe('タスク一覧 (tealus docs/16、#661)', () => {
+  const lastCall = () => fetch.mock.calls[fetch.mock.calls.length - 1];
+
+  test('listTasks: 誰のタスクかを X-Tealus-Requester で渡し、絞りは query に', async () => {
+    fetch.mockResolvedValueOnce(jsonRes(200, { token: 't1' })).mockResolvedValueOnce(jsonRes(200, { tasks: [] }));
+    await newClient().listTasks({ forUserId: 'u1', status: 'all', roomId: 'r1' });
+    const [url, opts] = lastCall();
+    expect(url).toBe('http://x/api/bot/tasks?status=all&room_id=r1');
+    expect(opts.method).toBe('GET');
+    expect(opts.headers['X-Tealus-Requester']).toBe('u1');
+  });
+
+  test('誰のタスクかを渡さなければヘッダを付けない (アシスタントの中継が付ける)', async () => {
+    fetch.mockResolvedValueOnce(jsonRes(200, { token: 't1' })).mockResolvedValueOnce(jsonRes(200, { tasks: [] }));
+    await newClient().listTasks({});
+    const [url, opts] = lastCall();
+    expect(url).toBe('http://x/api/bot/tasks');
+    expect(opts.headers).not.toHaveProperty('X-Tealus-Requester');
+  });
+
+  test('addTask / updateTask は POST / PATCH で本文を送る', async () => {
+    fetch.mockResolvedValueOnce(jsonRes(200, { token: 't1' })).mockResolvedValueOnce(jsonRes(201, { task: { id: 't' } }));
+    const c = newClient();
+    await c.addTask({ title: '見積り', section: 'decide' }, 'u1');
+    let [url, opts] = lastCall();
+    expect([url, opts.method, JSON.parse(opts.body)]).toEqual(['http://x/api/bot/tasks', 'POST', { title: '見積り', section: 'decide' }]);
+    expect(opts.headers['X-Tealus-Requester']).toBe('u1');
+    fetch.mockResolvedValueOnce(jsonRes(200, { task: { id: 't' } }));
+    await c.updateTask('t9', { ai_suggests_done: true }, 'u1');
+    [url, opts] = lastCall();
+    expect([url, opts.method, JSON.parse(opts.body)]).toEqual(['http://x/api/bot/tasks/t9', 'PATCH', { ai_suggests_done: true }]);
+  });
+});
