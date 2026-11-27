@@ -1082,4 +1082,27 @@ describe('タスク一覧の道具 (tealus docs/16、#661)', () => {
     expect(client.updateTask).toHaveBeenCalledWith('t9', { ai_suggests_done: true, note: '登録できたと聞いた' }, 'u1');
     expect(server.getTools().update_task.schema).not.toHaveProperty('status');
   });
+
+  // tealus docs/16 §4.2 / §8-6 (11-27): 期限は日付だけ。入れてよいのは会話に日が出たときと AI が自分で決めた日だけ
+  test('add_task: 期限 (due_date) を日付で渡せる', async () => {
+    await server.callTool('add_task', { for_user_id: 'u1', title: '見積り', due_date: '2026-11-30' });
+    expect(client.addTask).toHaveBeenCalledWith({ title: '見積り', due_date: '2026-11-30' }, 'u1');
+  });
+
+  test('update_task: 期限を変える・null で外す', async () => {
+    await server.callTool('update_task', { for_user_id: 'u1', task_id: 't9', due_date: '2026-12-04' });
+    expect(client.updateTask).toHaveBeenLastCalledWith('t9', { due_date: '2026-12-04' }, 'u1');
+    await server.callTool('update_task', { for_user_id: 'u1', task_id: 't9', due_date: null });
+    expect(client.updateTask).toHaveBeenLastCalledWith('t9', { due_date: null }, 'u1');
+  });
+
+  test('★ 期限の説明に「入れてよい 2 つのときだけ・見当で付けない・AI が決めた日はひとことに書く」がある', () => {
+    for (const name of ['add_task', 'update_task']) {
+      const d = server.getTools()[name].schema.due_date.description;
+      expect(d).toMatch(/YYYY-MM-DD/);
+      expect(d).toMatch(/会話/);
+      expect(d).toMatch(/AI が決めた日/);
+      expect(d).toMatch(/見当/);
+    }
+  });
 });

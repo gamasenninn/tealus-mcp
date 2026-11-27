@@ -566,6 +566,11 @@ function registerTools(server, client, opts = {}) {
     '誰のタスク一覧か (Tealus の利用者 ID)。社内のアシスタントからは不要 (依頼した人に自動で決まる)。cc の班などから書くときは必須');
   const SECTION = z.enum(['decide', 'do', 'waiting', 'later'])
     .describe('区分: decide 決める / do 手を動かす / waiting 待ち / later 今日でなくてよい');
+  // tealus docs/16 §4.2 / §8-6 (11-27): 期限は日付だけ。★ 入れてよいのは 2 つのときだけ (見当で付けない)
+  const DUE_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe(
+    '期限 (YYYY-MM-DD、日付だけ)。★ 入れてよいのは 2 つのときだけ: (1) 会話にはっきり日が出ているとき (「金曜まで」「30 日に」) に日付へ直して入れる。' +
+    '(2) AI が自分で決めた日 (「12-04 に数え直す」のような観測データの振り返り) — このときは note に「AI が決めた日」と書く。' +
+    'どちらでもなければ入れない (見当で付けない)。update_task で null を渡すと期限を外す');
   const pick = (o, keys) => Object.fromEntries(keys.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 
   server.tool(
@@ -595,16 +600,17 @@ function registerTools(server, client, opts = {}) {
       section: SECTION.optional(),
       room_id: z.string().optional().describe('括りの部屋 (省略 = 部屋なし)'),
       source_message_ids: z.array(z.string()).optional().describe('元の投稿の ID'),
+      due_date: DUE_DATE,
     },
     async (args) => {
-      const result = await client.addTask(pick(args, ['title', 'note', 'section', 'room_id', 'source_message_ids']), args.for_user_id);
+      const result = await client.addTask(pick(args, ['title', 'note', 'section', 'room_id', 'source_message_ids', 'due_date']), args.for_user_id);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
   );
 
   server.tool(
     'update_task',
-    'タスクを直す (題・ひとこと・区分・部屋・元の投稿・並び順)。★ 済みにはできない: 済んだと読んだら ai_suggests_done: true を付け、' +
+    'タスクを直す (題・ひとこと・区分・部屋・元の投稿・並び順・期限)。★ 済みにはできない: 済んだと読んだら ai_suggests_done: true を付け、' +
     'note に根拠を書く (本人が画面で押して済みにする)。同じ話の 2 件をまとめるときは、片方を直し、もう片方に ai_suggests_done: true と「○○にまとめた」。',
     {
       for_user_id: forUser,
@@ -616,9 +622,10 @@ function registerTools(server, client, opts = {}) {
       source_message_ids: z.array(z.string()).optional(),
       sort_order: z.number().int().optional().describe('同じ括りの中の並び (小さいほど上)'),
       ai_suggests_done: z.boolean().optional().describe('済んだようです、の印'),
+      due_date: DUE_DATE,
     },
     async (args) => {
-      const fields = pick(args, ['title', 'note', 'section', 'room_id', 'source_message_ids', 'sort_order', 'ai_suggests_done']);
+      const fields = pick(args, ['title', 'note', 'section', 'room_id', 'source_message_ids', 'sort_order', 'ai_suggests_done', 'due_date']);
       const result = await client.updateTask(args.task_id, fields, args.for_user_id);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
